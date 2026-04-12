@@ -47,7 +47,6 @@ function App() {
         setSavedUsername(userSnap.data().username);
       }
 
-      // 🔥 UPDATED: NO orderBy (we sort manually)
       const q = query(collection(db, "posts"));
 
       onSnapshot(q, (snapshot) => {
@@ -187,7 +186,7 @@ function App() {
       />
       <button onClick={createPost}>Post</button>
 
-      {/* 🔥 POSTS WITH WARNING SYSTEM */}
+      {/* 🔥 POSTS WITH WARNING + VERIFIED */}
       {posts.map(p => (
         <div key={p.id} style={{ marginTop: 20 }}>
 
@@ -208,6 +207,7 @@ function App() {
                 }
               >
                 @{p.username} ⭐ {p.trustScore || 50}
+                {(p.trustScore || 50) >= 80 && " 👑"}
               </strong>
 
               <p>{p.text}</p>
