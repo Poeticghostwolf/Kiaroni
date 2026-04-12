@@ -380,8 +380,7 @@ const actionBtn = {
 // =============================================
 // 🚀 RENDER
 // =============================================
-const root = createRoot(document.getElementById("root"));
-root.render(<App />);
+
 
 // =============================================
 // ✅ KIARONI V11 COMPLETE
