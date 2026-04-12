@@ -61,7 +61,7 @@ function App() {
     init();
   }, []);
 
-  // ✅ TRUST FUNCTION (correct place)
+  // ⭐ TRUST SYSTEM
   async function updateTrust(userId, amount) {
     const ref = doc(db, "users", userId);
     const snap = await getDoc(ref);
@@ -76,12 +76,23 @@ function App() {
     });
   }
 
+  // 🚨 REPORT SYSTEM
+  async function reportPost(post) {
+    await updateTrust(post.userId, -5);
+
+    await addDoc(collection(db, "reports"), {
+      postId: post.id,
+      reportedUser: post.userId,
+      createdAt: Date.now()
+    });
+  }
+
   async function saveUsername() {
     if (!username) return;
 
     await setDoc(doc(db, "users", user.uid), {
       username,
-      trustScore: 50 // ✅ initial score
+      trustScore: 50
     });
 
     setSavedUsername(username);
@@ -99,7 +110,7 @@ function App() {
       createdAt: Date.now()
     });
 
-    // ✅ trust increase for posting
+    // increase trust for posting
     await updateTrust(user.uid, 1);
 
     setText("");
@@ -144,14 +155,22 @@ function App() {
 
       {!savedUsername ? (
         <div>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} />
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Choose username"
+          />
           <button onClick={saveUsername}>Save</button>
         </div>
       ) : (
         <p>@{savedUsername}</p>
       )}
 
-      <input value={text} onChange={(e) => setText(e.target.value)} />
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="What's happening?"
+      />
       <button onClick={createPost}>Post</button>
 
       {posts.map(p => (
@@ -166,6 +185,11 @@ function App() {
           </strong>
 
           <p>{p.text}</p>
+
+          {/* 🚨 REPORT BUTTON */}
+          <button onClick={() => reportPost(p)}>
+            🚨 Report
+          </button>
         </div>
       ))}
     </div>
