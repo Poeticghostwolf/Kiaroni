@@ -110,7 +110,6 @@ function App() {
       createdAt: Date.now()
     });
 
-    // increase trust for posting
     await updateTrust(user.uid, 1);
 
     setText("");
@@ -173,25 +172,27 @@ function App() {
       />
       <button onClick={createPost}>Post</button>
 
-      {posts.map(p => (
-        <div key={p.id} style={{ marginTop: 20 }}>
-          <strong
-            style={{ cursor: "pointer" }}
-            onClick={() =>
-              setViewProfile({ userId: p.userId, username: p.username })
-            }
-          >
-            @{p.username} ⭐ {p.trustScore || 50}
-          </strong>
+      {/* 🔥 AUTO MOD FILTER HERE */}
+      {posts
+        .filter(p => (p.trustScore || 50) >= 40)
+        .map(p => (
+          <div key={p.id} style={{ marginTop: 20 }}>
+            <strong
+              style={{ cursor: "pointer" }}
+              onClick={() =>
+                setViewProfile({ userId: p.userId, username: p.username })
+              }
+            >
+              @{p.username} ⭐ {p.trustScore || 50}
+            </strong>
 
-          <p>{p.text}</p>
+            <p>{p.text}</p>
 
-          {/* 🚨 REPORT BUTTON */}
-          <button onClick={() => reportPost(p)}>
-            🚨 Report
-          </button>
-        </div>
-      ))}
+            <button onClick={() => reportPost(p)}>
+              🚨 Report
+            </button>
+          </div>
+        ))}
     </div>
   );
 }
