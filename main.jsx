@@ -55,16 +55,22 @@ function App() {
           ...d.data()
         }));
 
-        // 🧠 RANKING SYSTEM
+        // 🔥 TRENDING + RANKING SYSTEM
         data.sort((a, b) => {
           const trustA = a.trustScore || 50;
           const trustB = b.trustScore || 50;
 
-          if (trustA === trustB) {
+          const likesA = (a.likes || []).length;
+          const likesB = (b.likes || []).length;
+
+          const trendA = trustA + likesA * 3;
+          const trendB = trustB + likesB * 3;
+
+          if (trendA === trendB) {
             return b.createdAt - a.createdAt;
           }
 
-          return trustB - trustA;
+          return trendB - trendA;
         });
 
         setPosts(data);
@@ -186,7 +192,7 @@ function App() {
       />
       <button onClick={createPost}>Post</button>
 
-      {/* 🔥 POSTS WITH WARNING + VERIFIED */}
+      {/* 🔥 POSTS */}
       {posts.map(p => (
         <div key={p.id} style={{ marginTop: 20 }}>
 
