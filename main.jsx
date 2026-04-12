@@ -34,9 +34,6 @@ function App() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [follows, setFollows] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-
   useEffect(() => {
     async function init() {
       const res = await signInAnonymously(auth);
@@ -49,14 +46,8 @@ function App() {
         setSavedUsername(userSnap.data().username);
       }
 
-      const postSnap = await getDocs(query(collection(db, "posts"), orderBy("createdAt", "desc")));
-      setPosts(postSnap.docs.map(d => d.data()));
-
-      const followSnap = await getDocs(collection(db, "follows"));
-      setFollows(followSnap.docs.map(d => d.data()));
-
-      const notifSnap = await getDocs(collection(db, "notifications"));
-      setNotifications(notifSnap.docs.map(d => d.data()));
+      const snap = await getDocs(query(collection(db, "posts"), orderBy("createdAt", "desc")));
+      setPosts(snap.docs.map(d => d.data()));
 
       setLoading(false);
     }
@@ -65,9 +56,9 @@ function App() {
   }, []);
 
   async function saveUsername() {
-    await setDoc(doc(db, "users", user.uid), {
-      username
-    });
+    if (!username) return;
+
+    await setDoc(doc(db, "users", user.uid), { username });
     setSavedUsername(username);
   }
 
@@ -87,81 +78,78 @@ function App() {
     setPosts(snap.docs.map(d => d.data()));
   }
 
-  async function followUser(targetId) {
-    await addDoc(collection(db, "follows"), {
-      followerId: user.uid,
-      followingId: targetId
-    });
-
-    await addDoc(collection(db, "notifications"), {
-      toUserId: targetId,
-      fromUserId: user.uid,
-      type: "follow",
-      createdAt: Date.now()
-    });
-
-    const snap = await getDocs(collection(db, "follows"));
-    setFollows(snap.docs.map(d => d.data()));
-  }
-
-  function filteredPosts() {
-    const followingIds = follows
-      .filter(f => f.followerId === user.uid)
-      .map(f => f.followingId);
-
-    return posts.filter(
-      p => p.userId === user.uid || followingIds.includes(p.userId)
-    );
-  }
-
-  function myNotifications() {
-    return notifications.filter(n => n.toUserId === user.uid);
-  }
-
-  if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
+  if (loading) return <p style={{ padding: 20, color: "#fff", background: "#0f172a" }}>Loading...</p>;
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Kiaroni 🔥</h1>
+    <div style={{
+      background: "#0f172a",
+      minHeight: "100vh",
+      color: "#fff",
+      fontFamily: "system-ui",
+      padding: "20px"
+    }}>
+      <h1 style={{ marginBottom: 20 }}>Kiaroni 🔥</h1>
 
       {!savedUsername ? (
-        <div>
+        <div style={{
+          background: "#1e293b",
+          padding: 15,
+          borderRadius: 10,
+          marginBottom: 20
+        }}>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Choose username"
+            style={{
+              padding: 10,
+              borderRadius: 6,
+              border: "none",
+              marginRight: 10
+            }}
           />
           <button onClick={saveUsername}>Save</button>
         </div>
       ) : (
-        <p>@{savedUsername}</p>
+        <p style={{ marginBottom: 20 }}>@{savedUsername}</p>
       )}
 
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Post..."
-      />
-      <button onClick={createPost}>Post</button>
+      <div style={{
+        background: "#1e293b",
+        padding: 15,
+        borderRadius: 10,
+        marginBottom: 20
+      }}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="What's happening?"
+          style={{
+            width: "100%",
+            padding: 10,
+            borderRadius: 6,
+            border: "none",
+            marginBottom: 10
+          }}
+        />
+        <button onClick={createPost}>Post</button>
+      </div>
 
-      <h3>Notifications</h3>
-      {myNotifications().map((n, i) => (
-        <p key={i}>
-          Someone followed you 👀
-        </p>
-      ))}
-
-      <h3>Feed</h3>
-      {filteredPosts().map((p, i) => (
-        <div key={i}>
-          <strong>@{p.username}</strong>
-          <p>{p.text}</p>
-
-          {p.userId !== user.uid && (
-            <button onClick={() => followUser(p.userId)}>Follow</button>
-          )}
-        </div>
-      ))}
+      <div>
+        {posts.map((p, i) => (
+          <div key={i} style={{
+            background: "#1e293b",
+            padding: 15,
+            borderRadius: 10,
+            marginBottom: 15
+          }}>
+            <div style={{ fontWeight: "bold", marginBottom: 5 }}>
+              @{p.username || "anon"}
+            </div>
+            <div>{p.text}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
