@@ -63,6 +63,7 @@ function App() {
   }, []);
 
   async function saveUsername() {
+    if (!username) return;
     await setDoc(doc(db, "users", user.uid), { username });
     setSavedUsername(username);
   }
@@ -122,66 +123,124 @@ function App() {
     setCommentInputs(prev => ({ ...prev, [postId]: "" }));
   }
 
-  if (loading) return <p style={{ padding: 20, color: "#fff", background: "#0f172a" }}>Loading...</p>;
+  if (loading) return <p style={{ padding: 20, color: "#fff" }}>Loading...</p>;
 
   return (
     <div style={{
       background: "#0f172a",
       minHeight: "100vh",
       color: "#fff",
-      padding: 20
+      fontFamily: "system-ui",
+      display: "flex",
+      justifyContent: "center"
     }}>
-      <h1>Kiaroni 🔥</h1>
+      <div style={{ width: "100%", maxWidth: 500, padding: 20 }}>
 
-      {!savedUsername ? (
-        <div>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button onClick={saveUsername}>Save</button>
-        </div>
-      ) : (
-        <p>@{savedUsername}</p>
-      )}
+        <h1 style={{ marginBottom: 20 }}>Kiaroni 🔥</h1>
 
-      <input value={text} onChange={(e) => setText(e.target.value)} />
-      <button onClick={createPost}>Post</button>
-
-      {posts.map(p => (
-        <div key={p.id} style={{ marginTop: 20, background: "#1e293b", padding: 15 }}>
-          <strong>@{p.username}</strong>
-          <p>{p.text}</p>
-
-          <button onClick={() => toggleLike(p)}>
-            ❤️ {p.likes?.length || 0}
-          </button>
-
-          <div style={{ marginTop: 10 }}>
+        {!savedUsername ? (
+          <div style={{
+            background: "#1e293b",
+            padding: 15,
+            borderRadius: 12,
+            marginBottom: 20
+          }}>
             <input
-              value={commentInputs[p.id] || ""}
-              onChange={(e) =>
-                setCommentInputs(prev => ({
-                  ...prev,
-                  [p.id]: e.target.value
-                }))
-              }
-              placeholder="Write a comment..."
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Choose username"
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 8,
+                border: "none",
+                marginBottom: 10
+              }}
             />
-            <button onClick={() => {
-              addComment(p.id);
-              listenComments(p.id);
-            }}>
-              Comment
+            <button style={{ width: "100%" }} onClick={saveUsername}>
+              Continue
             </button>
           </div>
+        ) : (
+          <p style={{ marginBottom: 20, opacity: 0.7 }}>
+            Logged in as @{savedUsername}
+          </p>
+        )}
 
-          <div>
-            {(comments[p.id] || []).map((c, i) => (
-              <p key={i}>
-                <strong>@{c.username}</strong>: {c.text}
-              </p>
-            ))}
-          </div>
+        <div style={{
+          background: "#1e293b",
+          padding: 15,
+          borderRadius: 12,
+          marginBottom: 20
+        }}>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="What's happening?"
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 8,
+              border: "none",
+              marginBottom: 10
+            }}
+          />
+          <button style={{ width: "100%" }} onClick={createPost}>
+            Post
+          </button>
         </div>
-      ))}
+
+        {posts.map(p => (
+          <div key={p.id} style={{
+            background: "#1e293b",
+            padding: 15,
+            borderRadius: 12,
+            marginBottom: 15
+          }}>
+            <strong>@{p.username}</strong>
+            <p style={{ marginTop: 5 }}>{p.text}</p>
+
+            <button onClick={() => toggleLike(p)}>
+              ❤️ {p.likes?.length || 0}
+            </button>
+
+            <div style={{ marginTop: 10 }}>
+              <input
+                value={commentInputs[p.id] || ""}
+                onChange={(e) =>
+                  setCommentInputs(prev => ({
+                    ...prev,
+                    [p.id]: e.target.value
+                  }))
+                }
+                placeholder="Write a comment..."
+                style={{
+                  width: "100%",
+                  padding: 8,
+                  borderRadius: 6,
+                  border: "none",
+                  marginBottom: 5
+                }}
+              />
+              <button onClick={() => {
+                addComment(p.id);
+                listenComments(p.id);
+              }}>
+                Comment
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              {(comments[p.id] || []).map((c, i) => (
+                <p key={i} style={{ fontSize: 14 }}>
+                  <strong>@{c.username}</strong>: {c.text}
+                </p>
+              ))}
+            </div>
+          </div>
+        ))}
+
+      </div>
     </div>
   );
 }
