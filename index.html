@@ -6,6 +6,14 @@
 </head>
 <body style="margin:0">
   <div id="root"></div>
-  <script type="module" src="/main.js"></script>
+
+  <script type="module">
+    import React from "react";
+    import { createRoot } from "react-dom/client";
+    import App from "./main.js";
+
+    const root = createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
 </body>
 </html>
