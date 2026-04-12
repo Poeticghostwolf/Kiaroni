@@ -9,7 +9,6 @@ import {
   addDoc,
   onSnapshot,
   query,
-  orderBy,
   doc,
   setDoc,
   getDoc
@@ -48,12 +47,28 @@ function App() {
         setSavedUsername(userSnap.data().username);
       }
 
-      const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+      // 🔥 UPDATED: NO orderBy (we sort manually)
+      const q = query(collection(db, "posts"));
+
       onSnapshot(q, (snapshot) => {
-        setPosts(snapshot.docs.map(d => ({
+        const data = snapshot.docs.map(d => ({
           id: d.id,
           ...d.data()
-        })));
+        }));
+
+        // 🧠 RANKING SYSTEM
+        data.sort((a, b) => {
+          const trustA = a.trustScore || 50;
+          const trustB = b.trustScore || 50;
+
+          if (trustA === trustB) {
+            return b.createdAt - a.createdAt;
+          }
+
+          return trustB - trustA;
+        });
+
+        setPosts(data);
         setLoading(false);
       });
     }
@@ -172,7 +187,7 @@ function App() {
       />
       <button onClick={createPost}>Post</button>
 
-      {/* 🔥 WARNING SYSTEM HERE */}
+      {/* 🔥 POSTS WITH WARNING SYSTEM */}
       {posts.map(p => (
         <div key={p.id} style={{ marginTop: 20 }}>
 
