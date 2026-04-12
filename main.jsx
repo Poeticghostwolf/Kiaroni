@@ -2,13 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 
 function App() {
-  return (
-    <div style={{ padding: 20 }}>
-      <h1>Kiaroni 🚀</h1>
-      <p>App is stable again.</p>
-    </div>
-  );
+  return <h1>Kiaroni is LIVE 🔥</h1>;
 }
 
-const root = createRoot(document.getElementById("root"));
-root.render(<App />);
+createRoot(document.getElementById("root")).render(<App />);
