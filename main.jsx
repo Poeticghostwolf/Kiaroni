@@ -7,7 +7,7 @@ import { getFirestore, collection, addDoc, getDocs } from "firebase/firestore";
 
 // 🔥 YOUR FIREBASE CONFIG
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
+  apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
   projectId: "kiaroni"
 };
