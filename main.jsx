@@ -34,6 +34,9 @@ function App() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
 
+  const [comments, setComments] = useState({});
+  const [commentInputs, setCommentInputs] = useState({});
+
   useEffect(() => {
     async function init() {
       const res = await signInAnonymously(auth);
@@ -46,7 +49,6 @@ function App() {
         setSavedUsername(userSnap.data().username);
       }
 
-      // ⚡ REAL-TIME POSTS
       const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
       onSnapshot(q, (snapshot) => {
         setPosts(snapshot.docs.map(d => ({
@@ -61,8 +63,6 @@ function App() {
   }, []);
 
   async function saveUsername() {
-    if (!username) return;
-
     await setDoc(doc(db, "users", user.uid), { username });
     setSavedUsername(username);
   }
@@ -95,6 +95,33 @@ function App() {
     await setDoc(ref, { ...post, likes: updatedLikes });
   }
 
+  function listenComments(postId) {
+    const q = query(
+      collection(db, "posts", postId, "comments"),
+      orderBy("createdAt", "asc")
+    );
+
+    onSnapshot(q, (snapshot) => {
+      setComments(prev => ({
+        ...prev,
+        [postId]: snapshot.docs.map(d => d.data())
+      }));
+    });
+  }
+
+  async function addComment(postId) {
+    const text = commentInputs[postId];
+    if (!text) return;
+
+    await addDoc(collection(db, "posts", postId, "comments"), {
+      text,
+      username: savedUsername,
+      createdAt: Date.now()
+    });
+
+    setCommentInputs(prev => ({ ...prev, [postId]: "" }));
+  }
+
   if (loading) return <p style={{ padding: 20, color: "#fff", background: "#0f172a" }}>Loading...</p>;
 
   return (
@@ -102,50 +129,59 @@ function App() {
       background: "#0f172a",
       minHeight: "100vh",
       color: "#fff",
-      fontFamily: "system-ui",
-      padding: "20px"
+      padding: 20
     }}>
       <h1>Kiaroni 🔥</h1>
 
       {!savedUsername ? (
-        <div style={{ background: "#1e293b", padding: 15, borderRadius: 10 }}>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Choose username"
-          />
+        <div>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} />
           <button onClick={saveUsername}>Save</button>
         </div>
       ) : (
         <p>@{savedUsername}</p>
       )}
 
-      <div style={{ marginTop: 20 }}>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="What's happening?"
-        />
-        <button onClick={createPost}>Post</button>
-      </div>
+      <input value={text} onChange={(e) => setText(e.target.value)} />
+      <button onClick={createPost}>Post</button>
 
-      <div style={{ marginTop: 20 }}>
-        {posts.map((p) => (
-          <div key={p.id} style={{
-            background: "#1e293b",
-            padding: 15,
-            borderRadius: 10,
-            marginBottom: 15
-          }}>
-            <strong>@{p.username || "anon"}</strong>
-            <p>{p.text}</p>
+      {posts.map(p => (
+        <div key={p.id} style={{ marginTop: 20, background: "#1e293b", padding: 15 }}>
+          <strong>@{p.username}</strong>
+          <p>{p.text}</p>
 
-            <button onClick={() => toggleLike(p)}>
-              ❤️ {p.likes?.length || 0}
+          <button onClick={() => toggleLike(p)}>
+            ❤️ {p.likes?.length || 0}
+          </button>
+
+          <div style={{ marginTop: 10 }}>
+            <input
+              value={commentInputs[p.id] || ""}
+              onChange={(e) =>
+                setCommentInputs(prev => ({
+                  ...prev,
+                  [p.id]: e.target.value
+                }))
+              }
+              placeholder="Write a comment..."
+            />
+            <button onClick={() => {
+              addComment(p.id);
+              listenComments(p.id);
+            }}>
+              Comment
             </button>
           </div>
-        ))}
-      </div>
+
+          <div>
+            {(comments[p.id] || []).map((c, i) => (
+              <p key={i}>
+                <strong>@{c.username}</strong>: {c.text}
+              </p>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
