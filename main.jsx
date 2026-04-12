@@ -5,7 +5,6 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { getFirestore, collection, addDoc, getDocs } from "firebase/firestore";
 
-// 🔥 YOUR FIREBASE CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
@@ -19,29 +18,43 @@ const db = getFirestore(app);
 function App() {
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    signInAnonymously(auth);
+    async function init() {
+      try {
+        await signInAnonymously(auth);
 
-    async function loadPosts() {
-      const snap = await getDocs(collection(db, "posts"));
-      setPosts(snap.docs.map(d => d.data()));
+        const snap = await getDocs(collection(db, "posts"));
+        setPosts(snap.docs.map(d => d.data()));
+
+        setReady(true);
+      } catch (e) {
+        console.error("Firebase error:", e);
+        setReady(true); // prevents crash
+      }
     }
 
-    loadPosts();
+    init();
   }, []);
 
   async function createPost() {
-    if (!text) return;
+    try {
+      if (!text) return;
 
-    await addDoc(collection(db, "posts"), {
-      text,
-      createdAt: Date.now()
-    });
+      await addDoc(collection(db, "posts"), {
+        text,
+        createdAt: Date.now()
+      });
 
-    setText("");
-    window.location.reload();
+      setText("");
+      window.location.reload();
+    } catch (e) {
+      alert("Post failed (Firebase not ready yet)");
+    }
   }
+
+  if (!ready) return <p>Loading...</p>;
 
   return (
     <div style={{ padding: 20 }}>
