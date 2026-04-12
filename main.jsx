@@ -35,6 +35,7 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   const [follows, setFollows] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     async function init() {
@@ -53,6 +54,9 @@ function App() {
 
       const followSnap = await getDocs(collection(db, "follows"));
       setFollows(followSnap.docs.map(d => d.data()));
+
+      const notifSnap = await getDocs(collection(db, "notifications"));
+      setNotifications(notifSnap.docs.map(d => d.data()));
 
       setLoading(false);
     }
@@ -89,14 +93,15 @@ function App() {
       followingId: targetId
     });
 
+    await addDoc(collection(db, "notifications"), {
+      toUserId: targetId,
+      fromUserId: user.uid,
+      type: "follow",
+      createdAt: Date.now()
+    });
+
     const snap = await getDocs(collection(db, "follows"));
     setFollows(snap.docs.map(d => d.data()));
-  }
-
-  function isFollowing(targetId) {
-    return follows.some(
-      f => f.followerId === user.uid && f.followingId === targetId
-    );
   }
 
   function filteredPosts() {
@@ -107,6 +112,10 @@ function App() {
     return posts.filter(
       p => p.userId === user.uid || followingIds.includes(p.userId)
     );
+  }
+
+  function myNotifications() {
+    return notifications.filter(n => n.toUserId === user.uid);
   }
 
   if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
@@ -135,14 +144,20 @@ function App() {
       />
       <button onClick={createPost}>Post</button>
 
-      <h3>Feed</h3>
+      <h3>Notifications</h3>
+      {myNotifications().map((n, i) => (
+        <p key={i}>
+          Someone followed you 👀
+        </p>
+      ))}
 
+      <h3>Feed</h3>
       {filteredPosts().map((p, i) => (
-        <div key={i} style={{ marginBottom: 10 }}>
+        <div key={i}>
           <strong>@{p.username}</strong>
           <p>{p.text}</p>
 
-          {p.userId !== user.uid && !isFollowing(p.userId) && (
+          {p.userId !== user.uid && (
             <button onClick={() => followUser(p.userId)}>Follow</button>
           )}
         </div>
