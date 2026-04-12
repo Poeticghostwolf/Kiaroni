@@ -172,27 +172,39 @@ function App() {
       />
       <button onClick={createPost}>Post</button>
 
-      {/* 🔥 AUTO MOD FILTER HERE */}
-      {posts
-        .filter(p => (p.trustScore || 50) >= 40)
-        .map(p => (
-          <div key={p.id} style={{ marginTop: 20 }}>
-            <strong
-              style={{ cursor: "pointer" }}
-              onClick={() =>
-                setViewProfile({ userId: p.userId, username: p.username })
-              }
-            >
-              @{p.username} ⭐ {p.trustScore || 50}
-            </strong>
+      {/* 🔥 WARNING SYSTEM HERE */}
+      {posts.map(p => (
+        <div key={p.id} style={{ marginTop: 20 }}>
 
-            <p>{p.text}</p>
+          {(p.trustScore || 50) < 40 ? (
+            <div style={{
+              background: "#3f1d1d",
+              padding: 15,
+              borderRadius: 10
+            }}>
+              ⚠️ This post is hidden due to low trust
+            </div>
+          ) : (
+            <>
+              <strong
+                style={{ cursor: "pointer" }}
+                onClick={() =>
+                  setViewProfile({ userId: p.userId, username: p.username })
+                }
+              >
+                @{p.username} ⭐ {p.trustScore || 50}
+              </strong>
 
-            <button onClick={() => reportPost(p)}>
-              🚨 Report
-            </button>
-          </div>
-        ))}
+              <p>{p.text}</p>
+
+              <button onClick={() => reportPost(p)}>
+                🚨 Report
+              </button>
+            </>
+          )}
+
+        </div>
+      ))}
     </div>
   );
 }
