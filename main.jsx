@@ -7,7 +7,7 @@ import {
   getFirestore,
   collection,
   addDoc,
-  getDocs,
+  onSnapshot,
   query,
   orderBy,
   doc,
@@ -46,10 +46,15 @@ function App() {
         setSavedUsername(userSnap.data().username);
       }
 
-      const snap = await getDocs(query(collection(db, "posts"), orderBy("createdAt", "desc")));
-      setPosts(snap.docs.map(d => d.data()));
-
-      setLoading(false);
+      // ⚡ REAL-TIME POSTS
+      const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+      onSnapshot(q, (snapshot) => {
+        setPosts(snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        })));
+        setLoading(false);
+      });
     }
 
     init();
@@ -69,13 +74,25 @@ function App() {
       text,
       userId: user.uid,
       username: savedUsername,
+      likes: [],
       createdAt: Date.now()
     });
 
     setText("");
+  }
 
-    const snap = await getDocs(query(collection(db, "posts"), orderBy("createdAt", "desc")));
-    setPosts(snap.docs.map(d => d.data()));
+  async function toggleLike(post) {
+    const ref = doc(db, "posts", post.id);
+
+    let updatedLikes;
+
+    if (post.likes?.includes(user.uid)) {
+      updatedLikes = post.likes.filter(id => id !== user.uid);
+    } else {
+      updatedLikes = [...(post.likes || []), user.uid];
+    }
+
+    await setDoc(ref, { ...post, likes: updatedLikes });
   }
 
   if (loading) return <p style={{ padding: 20, color: "#fff", background: "#0f172a" }}>Loading...</p>;
@@ -88,65 +105,44 @@ function App() {
       fontFamily: "system-ui",
       padding: "20px"
     }}>
-      <h1 style={{ marginBottom: 20 }}>Kiaroni 🔥</h1>
+      <h1>Kiaroni 🔥</h1>
 
       {!savedUsername ? (
-        <div style={{
-          background: "#1e293b",
-          padding: 15,
-          borderRadius: 10,
-          marginBottom: 20
-        }}>
+        <div style={{ background: "#1e293b", padding: 15, borderRadius: 10 }}>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Choose username"
-            style={{
-              padding: 10,
-              borderRadius: 6,
-              border: "none",
-              marginRight: 10
-            }}
           />
           <button onClick={saveUsername}>Save</button>
         </div>
       ) : (
-        <p style={{ marginBottom: 20 }}>@{savedUsername}</p>
+        <p>@{savedUsername}</p>
       )}
 
-      <div style={{
-        background: "#1e293b",
-        padding: 15,
-        borderRadius: 10,
-        marginBottom: 20
-      }}>
+      <div style={{ marginTop: 20 }}>
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="What's happening?"
-          style={{
-            width: "100%",
-            padding: 10,
-            borderRadius: 6,
-            border: "none",
-            marginBottom: 10
-          }}
         />
         <button onClick={createPost}>Post</button>
       </div>
 
-      <div>
-        {posts.map((p, i) => (
-          <div key={i} style={{
+      <div style={{ marginTop: 20 }}>
+        {posts.map((p) => (
+          <div key={p.id} style={{
             background: "#1e293b",
             padding: 15,
             borderRadius: 10,
             marginBottom: 15
           }}>
-            <div style={{ fontWeight: "bold", marginBottom: 5 }}>
-              @{p.username || "anon"}
-            </div>
-            <div>{p.text}</div>
+            <strong>@{p.username || "anon"}</strong>
+            <p>{p.text}</p>
+
+            <button onClick={() => toggleLike(p)}>
+              ❤️ {p.likes?.length || 0}
+            </button>
           </div>
         ))}
       </div>
