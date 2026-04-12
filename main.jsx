@@ -61,9 +61,29 @@ function App() {
     init();
   }, []);
 
+  // ✅ TRUST FUNCTION (correct place)
+  async function updateTrust(userId, amount) {
+    const ref = doc(db, "users", userId);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) return;
+
+    const current = snap.data().trustScore || 50;
+
+    await setDoc(ref, {
+      ...snap.data(),
+      trustScore: current + amount
+    });
+  }
+
   async function saveUsername() {
     if (!username) return;
-    await setDoc(doc(db, "users", user.uid), { username });
+
+    await setDoc(doc(db, "users", user.uid), {
+      username,
+      trustScore: 50 // ✅ initial score
+    });
+
     setSavedUsername(username);
   }
 
@@ -75,8 +95,12 @@ function App() {
       userId: user.uid,
       username: savedUsername,
       likes: [],
+      trustScore: 50,
       createdAt: Date.now()
     });
+
+    // ✅ trust increase for posting
+    await updateTrust(user.uid, 1);
 
     setText("");
   }
@@ -134,10 +158,13 @@ function App() {
         <div key={p.id} style={{ marginTop: 20 }}>
           <strong
             style={{ cursor: "pointer" }}
-            onClick={() => setViewProfile({ userId: p.userId, username: p.username })}
+            onClick={() =>
+              setViewProfile({ userId: p.userId, username: p.username })
+            }
           >
-            @{p.username}
+            @{p.username} ⭐ {p.trustScore || 50}
           </strong>
+
           <p>{p.text}</p>
         </div>
       ))}
