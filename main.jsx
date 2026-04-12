@@ -34,8 +34,7 @@ function App() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [comments, setComments] = useState({});
-  const [commentInputs, setCommentInputs] = useState({});
+  const [viewProfile, setViewProfile] = useState(null);
 
   useEffect(() => {
     async function init() {
@@ -82,165 +81,66 @@ function App() {
     setText("");
   }
 
-  async function toggleLike(post) {
-    const ref = doc(db, "posts", post.id);
-
-    let updatedLikes;
-
-    if (post.likes?.includes(user.uid)) {
-      updatedLikes = post.likes.filter(id => id !== user.uid);
-    } else {
-      updatedLikes = [...(post.likes || []), user.uid];
-    }
-
-    await setDoc(ref, { ...post, likes: updatedLikes });
+  function profilePosts() {
+    return posts.filter(p => p.userId === viewProfile.userId);
   }
 
-  function listenComments(postId) {
-    const q = query(
-      collection(db, "posts", postId, "comments"),
-      orderBy("createdAt", "asc")
+  if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
+
+  // 🔥 PROFILE VIEW
+  if (viewProfile) {
+    return (
+      <div style={{ padding: 20, background: "#0f172a", minHeight: "100vh", color: "#fff" }}>
+        <button onClick={() => setViewProfile(null)}>← Back</button>
+
+        <h2>@{viewProfile.username}</h2>
+
+        {profilePosts().map(p => (
+          <div key={p.id} style={{
+            background: "#1e293b",
+            padding: 15,
+            borderRadius: 10,
+            marginTop: 10
+          }}>
+            <p>{p.text}</p>
+          </div>
+        ))}
+      </div>
     );
-
-    onSnapshot(q, (snapshot) => {
-      setComments(prev => ({
-        ...prev,
-        [postId]: snapshot.docs.map(d => d.data())
-      }));
-    });
   }
-
-  async function addComment(postId) {
-    const text = commentInputs[postId];
-    if (!text) return;
-
-    await addDoc(collection(db, "posts", postId, "comments"), {
-      text,
-      username: savedUsername,
-      createdAt: Date.now()
-    });
-
-    setCommentInputs(prev => ({ ...prev, [postId]: "" }));
-  }
-
-  if (loading) return <p style={{ padding: 20, color: "#fff" }}>Loading...</p>;
 
   return (
     <div style={{
       background: "#0f172a",
       minHeight: "100vh",
       color: "#fff",
-      fontFamily: "system-ui",
-      display: "flex",
-      justifyContent: "center"
+      padding: 20
     }}>
-      <div style={{ width: "100%", maxWidth: 500, padding: 20 }}>
+      <h1>Kiaroni 🔥</h1>
 
-        <h1 style={{ marginBottom: 20 }}>Kiaroni 🔥</h1>
-
-        {!savedUsername ? (
-          <div style={{
-            background: "#1e293b",
-            padding: 15,
-            borderRadius: 12,
-            marginBottom: 20
-          }}>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Choose username"
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 8,
-                border: "none",
-                marginBottom: 10
-              }}
-            />
-            <button style={{ width: "100%" }} onClick={saveUsername}>
-              Continue
-            </button>
-          </div>
-        ) : (
-          <p style={{ marginBottom: 20, opacity: 0.7 }}>
-            Logged in as @{savedUsername}
-          </p>
-        )}
-
-        <div style={{
-          background: "#1e293b",
-          padding: 15,
-          borderRadius: 12,
-          marginBottom: 20
-        }}>
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="What's happening?"
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 8,
-              border: "none",
-              marginBottom: 10
-            }}
-          />
-          <button style={{ width: "100%" }} onClick={createPost}>
-            Post
-          </button>
+      {!savedUsername ? (
+        <div>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} />
+          <button onClick={saveUsername}>Save</button>
         </div>
+      ) : (
+        <p>@{savedUsername}</p>
+      )}
 
-        {posts.map(p => (
-          <div key={p.id} style={{
-            background: "#1e293b",
-            padding: 15,
-            borderRadius: 12,
-            marginBottom: 15
-          }}>
-            <strong>@{p.username}</strong>
-            <p style={{ marginTop: 5 }}>{p.text}</p>
+      <input value={text} onChange={(e) => setText(e.target.value)} />
+      <button onClick={createPost}>Post</button>
 
-            <button onClick={() => toggleLike(p)}>
-              ❤️ {p.likes?.length || 0}
-            </button>
-
-            <div style={{ marginTop: 10 }}>
-              <input
-                value={commentInputs[p.id] || ""}
-                onChange={(e) =>
-                  setCommentInputs(prev => ({
-                    ...prev,
-                    [p.id]: e.target.value
-                  }))
-                }
-                placeholder="Write a comment..."
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 6,
-                  border: "none",
-                  marginBottom: 5
-                }}
-              />
-              <button onClick={() => {
-                addComment(p.id);
-                listenComments(p.id);
-              }}>
-                Comment
-              </button>
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              {(comments[p.id] || []).map((c, i) => (
-                <p key={i} style={{ fontSize: 14 }}>
-                  <strong>@{c.username}</strong>: {c.text}
-                </p>
-              ))}
-            </div>
-          </div>
-        ))}
-
-      </div>
+      {posts.map(p => (
+        <div key={p.id} style={{ marginTop: 20 }}>
+          <strong
+            style={{ cursor: "pointer" }}
+            onClick={() => setViewProfile({ userId: p.userId, username: p.username })}
+          >
+            @{p.username}
+          </strong>
+          <p>{p.text}</p>
+        </div>
+      ))}
     </div>
   );
 }
