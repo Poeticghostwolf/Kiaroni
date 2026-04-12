@@ -11,7 +11,8 @@ import {
   query,
   doc,
   setDoc,
-  getDoc
+  getDoc,
+  updateDoc
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -55,7 +56,7 @@ function App() {
           ...d.data()
         }));
 
-        // 🔥 TRENDING + RANKING SYSTEM
+        // 🔥 TRENDING SORT
         data.sort((a, b) => {
           const trustA = a.trustScore || 50;
           const trustB = b.trustScore || 50;
@@ -81,7 +82,6 @@ function App() {
     init();
   }, []);
 
-  // ⭐ TRUST SYSTEM
   async function updateTrust(userId, amount) {
     const ref = doc(db, "users", userId);
     const snap = await getDoc(ref);
@@ -96,7 +96,24 @@ function App() {
     });
   }
 
-  // 🚨 REPORT SYSTEM
+  async function toggleLike(post) {
+    const ref = doc(db, "posts", post.id);
+    const currentLikes = post.likes || [];
+
+    let updatedLikes;
+
+    if (currentLikes.includes(user.uid)) {
+      updatedLikes = currentLikes.filter(id => id !== user.uid);
+    } else {
+      updatedLikes = [...currentLikes, user.uid];
+      await updateTrust(post.userId, 1);
+    }
+
+    await updateDoc(ref, {
+      likes: updatedLikes
+    });
+  }
+
   async function reportPost(post) {
     await updateTrust(post.userId, -5);
 
@@ -131,7 +148,6 @@ function App() {
     });
 
     await updateTrust(user.uid, 1);
-
     setText("");
   }
 
@@ -141,21 +157,18 @@ function App() {
 
   if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
 
-  // 🔥 PROFILE VIEW
+  // PROFILE PAGE
   if (viewProfile) {
     return (
-      <div style={{ padding: 20, background: "#0f172a", minHeight: "100vh", color: "#fff" }}>
-        <button onClick={() => setViewProfile(null)}>← Back</button>
+      <div style={styles.page}>
+        <button style={styles.backBtn} onClick={() => setViewProfile(null)}>
+          ← Back
+        </button>
 
         <h2>@{viewProfile.username}</h2>
 
         {profilePosts().map(p => (
-          <div key={p.id} style={{
-            background: "#1e293b",
-            padding: 15,
-            borderRadius: 10,
-            marginTop: 10
-          }}>
+          <div key={p.id} style={styles.card}>
             <p>{p.text}</p>
           </div>
         ))}
@@ -164,70 +177,150 @@ function App() {
   }
 
   return (
-    <div style={{
-      background: "#0f172a",
-      minHeight: "100vh",
-      color: "#fff",
-      padding: 20
-    }}>
-      <h1>Kiaroni 🔥</h1>
+    <div style={styles.page}>
+      <h1 style={styles.title}>Kiaroni 🔥</h1>
 
       {!savedUsername ? (
-        <div>
+        <div style={styles.card}>
           <input
+            style={styles.input}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Choose username"
           />
-          <button onClick={saveUsername}>Save</button>
+          <button style={styles.button} onClick={saveUsername}>
+            Save
+          </button>
         </div>
       ) : (
-        <p>@{savedUsername}</p>
+        <p style={{ marginBottom: 20 }}>@{savedUsername}</p>
       )}
 
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="What's happening?"
-      />
-      <button onClick={createPost}>Post</button>
+      <div style={styles.card}>
+        <input
+          style={styles.input}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="What's happening?"
+        />
+        <button style={styles.button} onClick={createPost}>
+          Post
+        </button>
+      </div>
 
-      {/* 🔥 POSTS */}
-      {posts.map(p => (
-        <div key={p.id} style={{ marginTop: 20 }}>
+      {posts.map(p => {
+        const liked = (p.likes || []).includes(user.uid);
 
-          {(p.trustScore || 50) < 40 ? (
-            <div style={{
-              background: "#3f1d1d",
-              padding: 15,
-              borderRadius: 10
-            }}>
-              ⚠️ This post is hidden due to low trust
-            </div>
-          ) : (
-            <>
-              <strong
-                style={{ cursor: "pointer" }}
-                onClick={() =>
-                  setViewProfile({ userId: p.userId, username: p.username })
-                }
-              >
-                @{p.username} ⭐ {p.trustScore || 50}
-                {(p.trustScore || 50) >= 80 && " 👑"}
-              </strong>
+        return (
+          <div key={p.id} style={styles.card}>
 
-              <p>{p.text}</p>
+            {(p.trustScore || 50) < 40 ? (
+              <div style={styles.warning}>
+                ⚠️ This post is hidden due to low trust
+              </div>
+            ) : (
+              <>
+                <div style={styles.header}>
+                  <span
+                    style={styles.username}
+                    onClick={() =>
+                      setViewProfile({ userId: p.userId, username: p.username })
+                    }
+                  >
+                    @{p.username} ⭐ {p.trustScore || 50}
+                    {(p.trustScore || 50) >= 80 && " 👑"}
+                  </span>
+                </div>
 
-              <button onClick={() => reportPost(p)}>
-                🚨 Report
-              </button>
-            </>
-          )}
+                <p style={styles.text}>{p.text}</p>
 
-        </div>
-      ))}
+                <div style={styles.actions}>
+                  <button style={styles.likeBtn} onClick={() => toggleLike(p)}>
+                    {liked ? "💔" : "❤️"} {(p.likes || []).length}
+                  </button>
+
+                  <button style={styles.reportBtn} onClick={() => reportPost(p)}>
+                    🚨 Report
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
+
+// 🎨 CLEAN UI STYLES
+const styles = {
+  page: {
+    background: "#0f172a",
+    minHeight: "100vh",
+    color: "#fff",
+    padding: 20,
+    maxWidth: 600,
+    margin: "0 auto"
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: 20
+  },
+  card: {
+    background: "#1e293b",
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 15
+  },
+  input: {
+    width: "100%",
+    padding: 10,
+    borderRadius: 8,
+    border: "none",
+    marginBottom: 10
+  },
+  button: {
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "none",
+    cursor: "pointer"
+  },
+  header: {
+    marginBottom: 8
+  },
+  username: {
+    cursor: "pointer",
+    fontWeight: "bold"
+  },
+  text: {
+    marginBottom: 10
+  },
+  actions: {
+    display: "flex",
+    gap: 10
+  },
+  likeBtn: {
+    background: "#334155",
+    border: "none",
+    padding: "6px 10px",
+    borderRadius: 8,
+    cursor: "pointer"
+  },
+  reportBtn: {
+    background: "#7f1d1d",
+    border: "none",
+    padding: "6px 10px",
+    borderRadius: 8,
+    cursor: "pointer"
+  },
+  warning: {
+    background: "#3f1d1d",
+    padding: 10,
+    borderRadius: 8
+  },
+  backBtn: {
+    marginBottom: 10
+  }
+};
 
 createRoot(document.getElementById("root")).render(<App />);
