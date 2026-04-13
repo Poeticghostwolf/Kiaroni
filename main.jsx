@@ -22,9 +22,9 @@ import {
 } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSy...",
+  apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
-  projectId: "kiaroni",
+  projectId: "kiaroni"
   storageBucket: "kiaroni.appspot.com"
 };
 
