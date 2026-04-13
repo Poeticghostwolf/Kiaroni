@@ -37,6 +37,9 @@ function App() {
   const [viewProfile, setViewProfile] = useState(null);
   const [animatingLike, setAnimatingLike] = useState(null);
 
+  // 🔔 NEW
+  const [notifications, setNotifications] = useState([]);
+
   useEffect(() => {
     async function init() {
       const res = await signInAnonymously(auth);
@@ -49,8 +52,8 @@ function App() {
         setSavedUsername(userSnap.data().username);
       }
 
+      // POSTS
       const q = query(collection(db, "posts"));
-
       onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(d => ({
           id: d.id,
@@ -76,6 +79,14 @@ function App() {
 
         setPosts(data);
         setLoading(false);
+      });
+
+      // 🔔 NOTIFICATIONS LISTENER
+      const notifQuery = query(collection(db, "notifications"));
+      onSnapshot(notifQuery, (snapshot) => {
+        const data = snapshot.docs.map(d => d.data());
+        const mine = data.filter(n => n.toUser === res.user.uid);
+        setNotifications(mine);
       });
     }
 
@@ -105,7 +116,19 @@ function App() {
       updatedLikes = currentLikes.filter(id => id !== user.uid);
     } else {
       updatedLikes = [...currentLikes, user.uid];
+
       await updateTrust(post.userId, 1);
+
+      // 🔔 CREATE NOTIFICATION
+      if (post.userId !== user.uid) {
+        await addDoc(collection(db, "notifications"), {
+          type: "like",
+          toUser: post.userId,
+          fromUser: savedUsername,
+          postText: post.text,
+          createdAt: Date.now()
+        });
+      }
     }
 
     setAnimatingLike(post.id);
@@ -180,6 +203,18 @@ function App() {
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>Kiaroni 🔥</h1>
+
+      {/* 🔔 NOTIFICATIONS UI */}
+      {notifications.length > 0 && (
+        <div style={styles.card}>
+          <h3>🔔 Notifications</h3>
+          {notifications.slice(0, 3).map((n, i) => (
+            <p key={i} style={{ fontSize: 14 }}>
+              ❤️ {n.fromUser} liked your post
+            </p>
+          ))}
+        </div>
+      )}
 
       {!savedUsername ? (
         <div style={styles.card}>
