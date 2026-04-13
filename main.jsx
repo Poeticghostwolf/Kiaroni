@@ -41,6 +41,7 @@ function App() {
 
   const [user, setUser] = useState(null);
   const [savedUsername, setSavedUsername] = useState(null);
+  const [usernameInput, setUsernameInput] = useState("");
 
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
@@ -58,9 +59,7 @@ function App() {
   const [userData, setUserData] = useState(null);
   const [selectedProfile, setSelectedProfile] = useState(null);
 
-  const [avatarFile, setAvatarFile] = useState(null);
   const [reports, setReports] = useState([]);
-
   const [swipeQueue, setSwipeQueue] = useState([]);
 
   useEffect(() => {
@@ -110,28 +109,48 @@ function App() {
     init();
   }, []);
 
-  function getUser(id) {
-    return users.find(u => u.id === id) || {};
-  }
-
-  function getUserPosts(id) {
-    return posts.filter(p => p.userId === id);
-  }
-
   function getSmartFeed() {
     return [...posts]
       .map(p => {
         const likes = (p.likes || []).length;
         const age = Date.now() - p.createdAt;
         const recencyBoost = age < 3600000 ? 20 : 0;
-        const interestBoost = p.text?.split(" ").length || 0;
-        return { ...p, score: likes * 10 + recencyBoost + interestBoost };
+        return { ...p, score: likes * 10 + recencyBoost };
       })
       .sort((a, b) => b.score - a.score);
   }
 
+  async function createUserIfNeeded() {
+    if (!user || !usernameInput) return;
+
+    const refDoc = doc(db, "users", user.uid);
+    const snap = await getDoc(refDoc);
+
+    if (snap.exists()) {
+      setSavedUsername(snap.data().username);
+      return;
+    }
+
+    const allUsersSnap = await getDocs(collection(db, "users"));
+    const isFirstUser = allUsersSnap.empty;
+
+    await setDoc(refDoc, {
+      username: usernameInput,
+      followers: [],
+      following: [],
+      isAdmin: isFirstUser
+    });
+
+    setSavedUsername(usernameInput);
+
+    if (isFirstUser) {
+      alert("🔥 You are the first user — Admin granted!");
+    }
+  }
+
   async function createPost() {
     let imageUrl = "";
+
     if (file) {
       const r = ref(storage, `posts/${Date.now()}_${file.name}`);
       await uploadBytes(r, file);
@@ -217,6 +236,17 @@ function App() {
 
       {popup && <div>{popup}</div>}
 
+      {!savedUsername && (
+        <>
+          <input
+            placeholder="Username"
+            value={usernameInput}
+            onChange={e => setUsernameInput(e.target.value)}
+          />
+          <button onClick={createUserIfNeeded}>Continue</button>
+        </>
+      )}
+
       {tab === "home" &&
         getSmartFeed().map(p => (
           <div key={p.id}>
@@ -237,6 +267,18 @@ function App() {
         </div>
       )}
 
+      {tab === "admin" && userData?.isAdmin && (
+        <div>
+          <h2>Admin Panel</h2>
+          {reports.map((r, i) => (
+            <div key={i}>
+              <p>{r.postId}</p>
+              <p>{r.reportedUser}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {chatUser && (
         <div>
           {messages.map(m => (
@@ -248,7 +290,12 @@ function App() {
       )}
 
       <div style={{ position: "fixed", bottom: 0 }}>
-        {["home", "swipe", "profile"].map(t => (
+        {[
+          "home",
+          "swipe",
+          "profile",
+          ...(userData?.isAdmin ? ["admin"] : [])
+        ].map(t => (
           <button key={t} onClick={() => setTab(t)}>
             {t}
           </button>
