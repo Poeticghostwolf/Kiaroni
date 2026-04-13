@@ -213,9 +213,21 @@ function App() {
         const liked = (p.likes || []).includes(user.uid);
         const isAnimating = animatingLike === p.id;
 
+        const trust = p.trustScore || 50;
+        const likes = (p.likes || []).length;
+        const trendingScore = trust + likes * 3;
+        const isTrending = trendingScore > 80;
+
         return (
-          <div key={p.id} style={styles.cardAnimated}>
-            {(p.trustScore || 50) < 40 ? (
+          <div
+            key={p.id}
+            style={{
+              ...styles.cardAnimated,
+              border: isTrending ? "2px solid orange" : "none",
+              boxShadow: isTrending ? "0 0 10px orange" : "none"
+            }}
+          >
+            {trust < 40 ? (
               <div style={styles.warning}>⚠️ Hidden due to low trust</div>
             ) : (
               <>
@@ -226,8 +238,9 @@ function App() {
                       setViewProfile({ userId: p.userId, username: p.username })
                     }
                   >
-                    @{p.username} ⭐ {p.trustScore || 50}
-                    {(p.trustScore || 50) >= 80 && " 👑"}
+                    @{p.username} ⭐ {trust}
+                    {trust >= 80 && " 👑"}
+                    {isTrending && " 🔥"}
                   </span>
                 </div>
 
@@ -241,7 +254,7 @@ function App() {
                     }}
                     onClick={() => toggleLike(p)}
                   >
-                    {liked ? "💔" : "❤️"} {(p.likes || []).length}
+                    {liked ? "💔" : "❤️"} {likes}
                   </button>
 
                   <button
