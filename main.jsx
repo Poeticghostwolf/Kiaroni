@@ -15,7 +15,6 @@ import {
   updateDoc
 } from "firebase/firestore";
 
-// ✅ YOUR REAL CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
@@ -57,7 +56,6 @@ function App() {
           ...d.data()
         }));
 
-        // 🔥 TRENDING SORT
         data.sort((a, b) => {
           const trustA = a.trustScore || 50;
           const trustB = b.trustScore || 50;
@@ -83,11 +81,9 @@ function App() {
     init();
   }, []);
 
-  // ⭐ TRUST SYSTEM
   async function updateTrust(userId, amount) {
     const ref = doc(db, "users", userId);
     const snap = await getDoc(ref);
-
     if (!snap.exists()) return;
 
     const current = snap.data().trustScore || 50;
@@ -98,7 +94,6 @@ function App() {
     });
   }
 
-  // ❤️ LIKE SYSTEM
   async function toggleLike(post) {
     const ref = doc(db, "posts", post.id);
     const currentLikes = post.likes || [];
@@ -112,12 +107,9 @@ function App() {
       await updateTrust(post.userId, 1);
     }
 
-    await updateDoc(ref, {
-      likes: updatedLikes
-    });
+    await updateDoc(ref, { likes: updatedLikes });
   }
 
-  // 🚨 REPORT SYSTEM (FIXED WITH FEEDBACK)
   async function reportPost(post) {
     await updateTrust(post.userId, -5);
 
@@ -163,7 +155,6 @@ function App() {
 
   if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
 
-  // 👤 PROFILE VIEW
   if (viewProfile) {
     return (
       <div style={styles.page}>
@@ -194,7 +185,12 @@ function App() {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Choose username"
           />
-          <button style={styles.primaryBtn} onClick={saveUsername}>
+          <button
+            style={styles.primaryBtn}
+            onClick={saveUsername}
+            onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.95)"}
+            onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
+          >
             Save
           </button>
         </div>
@@ -209,7 +205,12 @@ function App() {
           onChange={(e) => setText(e.target.value)}
           placeholder="What's happening?"
         />
-        <button style={styles.primaryBtn} onClick={createPost}>
+        <button
+          style={styles.primaryBtn}
+          onClick={createPost}
+          onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.95)"}
+          onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
+        >
           Post
         </button>
       </div>
@@ -218,11 +219,15 @@ function App() {
         const liked = (p.likes || []).includes(user.uid);
 
         return (
-          <div key={p.id} style={styles.card}>
-
+          <div
+            key={p.id}
+            style={styles.card}
+            onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.02)"}
+            onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+          >
             {(p.trustScore || 50) < 40 ? (
               <div style={styles.warning}>
-                ⚠️ This post is hidden due to low trust
+                ⚠️ Hidden due to low trust
               </div>
             ) : (
               <>
@@ -264,7 +269,6 @@ function App() {
   );
 }
 
-// 🎨 UI STYLES
 const styles = {
   page: {
     background: "#0f172a",
@@ -275,20 +279,14 @@ const styles = {
     margin: "0 auto",
     fontFamily: "system-ui"
   },
-  title: {
-    textAlign: "center",
-    marginBottom: 20
-  },
-  usernameDisplay: {
-    textAlign: "center",
-    marginBottom: 20,
-    opacity: 0.8
-  },
+  title: { textAlign: "center", marginBottom: 20 },
+  usernameDisplay: { textAlign: "center", marginBottom: 20, opacity: 0.8 },
   card: {
     background: "#1e293b",
     padding: 15,
     borderRadius: 12,
-    marginBottom: 15
+    marginBottom: 15,
+    transition: "all 0.2s ease"
   },
   input: {
     width: "100%",
@@ -304,22 +302,13 @@ const styles = {
     border: "none",
     background: "#3b82f6",
     color: "#fff",
-    cursor: "pointer"
+    cursor: "pointer",
+    transition: "all 0.1s ease"
   },
-  header: {
-    marginBottom: 8
-  },
-  username: {
-    fontWeight: "bold",
-    cursor: "pointer"
-  },
-  text: {
-    marginBottom: 10
-  },
-  actions: {
-    display: "flex",
-    justifyContent: "space-between"
-  },
+  header: { marginBottom: 8 },
+  username: { fontWeight: "bold", cursor: "pointer" },
+  text: { marginBottom: 10 },
+  actions: { display: "flex", justifyContent: "space-between" },
   likeBtn: {
     background: "#334155",
     border: "none",
@@ -339,9 +328,7 @@ const styles = {
     padding: 10,
     borderRadius: 8
   },
-  backBtn: {
-    marginBottom: 10
-  }
+  backBtn: { marginBottom: 10 }
 };
 
 createRoot(document.getElementById("root")).render(<App />);
