@@ -40,6 +40,8 @@ function App() {
   const [username, setUsername] = useState("");
   const [savedUsername, setSavedUsername] = useState(null);
 
+  const [userData, setUserData] = useState(null);
+
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
@@ -54,6 +56,7 @@ function App() {
   const [notifications, setNotifications] = useState([]);
 
   const [selectedProfile, setSelectedProfile] = useState(null);
+  const [viewList, setViewList] = useState(null); // followers/following modal
 
   useEffect(() => {
     async function init() {
@@ -61,8 +64,13 @@ function App() {
       setUser(res.user);
 
       const userRef = doc(db, "users", res.user.uid);
+
       const snap = await getDoc(userRef);
       if (snap.exists()) setSavedUsername(snap.data().username);
+
+      onSnapshot(userRef, s => {
+        if (s.exists()) setUserData(s.data());
+      });
 
       onSnapshot(collection(db, "users"), snap => {
         setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -87,13 +95,52 @@ function App() {
 
   async function saveUsername() {
     if (!username) return;
-    await setDoc(doc(db, "users", user.uid), { username });
+
+    await setDoc(doc(db, "users", user.uid), {
+      username,
+      followers: [],
+      following: []
+    });
+
     setSavedUsername(username);
+  }
+
+  async function toggleFollow(targetId) {
+    const myRef = doc(db, "users", user.uid);
+    const theirRef = doc(db, "users", targetId);
+
+    const mySnap = await getDoc(myRef);
+    const theirSnap = await getDoc(theirRef);
+
+    const myData = mySnap.data() || {};
+    const theirData = theirSnap.data() || {};
+
+    const following = myData.following || [];
+    const followers = theirData.followers || [];
+
+    const isFollowing = following.includes(targetId);
+
+    if (isFollowing) {
+      await updateDoc(myRef, {
+        following: following.filter(id => id !== targetId)
+      });
+
+      await updateDoc(theirRef, {
+        followers: followers.filter(id => id !== user.uid)
+      });
+    } else {
+      await updateDoc(myRef, {
+        following: [...following, targetId]
+      });
+
+      await updateDoc(theirRef, {
+        followers: [...followers, user.uid]
+      });
+    }
   }
 
   async function uploadImage(file) {
     if (!file) return null;
-
     const storageRef = ref(storage, `posts/${Date.now()}_${file.name}`);
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
@@ -117,84 +164,12 @@ function App() {
     setFile(null);
   }
 
-  async function toggleLike(post) {
-    const refDoc = doc(db, "posts", post.id);
-    const likes = post.likes || [];
-
-    const isLiked = likes.includes(user.uid);
-
-    const updated = isLiked
-      ? likes.filter(id => id !== user.uid)
-      : [...likes, user.uid];
-
-    await updateDoc(refDoc, { likes: updated });
-
-    if (!isLiked && post.userId !== user.uid) {
-      await addDoc(collection(db, "notifications"), {
-        text: `${savedUsername} liked your post`,
-        toUser: post.userId,
-        createdAt: Date.now()
-      });
-    }
-  }
-
-  async function sendMessage() {
-    if (!chatText || !chatUser) return;
-
-    await addDoc(collection(db, "messages"), {
-      text: chatText,
-      from: user.uid,
-      to: chatUser.id,
-      username: savedUsername,
-      createdAt: Date.now()
-    });
-
-    await addDoc(collection(db, "notifications"), {
-      text: `${savedUsername} sent you a message`,
-      toUser: chatUser.id,
-      createdAt: Date.now()
-    });
-
-    setChatText("");
-  }
-
-  function getConversations() {
-    const map = {};
-
-    messages.forEach(m => {
-      if (m.from === user.uid || m.to === user.uid) {
-        const otherId = m.from === user.uid ? m.to : m.from;
-
-        if (!map[otherId]) {
-          map[otherId] = {
-            userId: otherId,
-            username: m.username
-          };
-        }
-      }
-    });
-
-    return Object.values(map);
-  }
-
-  function getChatMessages() {
-    if (!chatUser) return [];
-
-    return messages.filter(
-      m =>
-        (m.from === user.uid && m.to === chatUser.id) ||
-        (m.to === user.uid && m.from === chatUser.id)
-    );
-  }
-
-  function searchResults() {
-    return users.filter(u =>
-      u.username?.toLowerCase().includes(search.toLowerCase())
-    );
-  }
-
   function userPosts(userId) {
     return posts.filter(p => p.userId === userId);
+  }
+
+  function findUsers(ids = []) {
+    return users.filter(u => ids.includes(u.id));
   }
 
   return (
@@ -216,26 +191,15 @@ function App() {
             <input type="file" onChange={e => setFile(e.target.files[0])} />
             <button onClick={createPost}>Post</button>
 
-            {posts.map(p => {
-              const isLiked = (p.likes || []).includes(user.uid);
-
-              return (
-                <div key={p.id} style={styles.card}>
-                  <strong
-                    onClick={() => setSelectedProfile({ id: p.userId, username: p.username })}
-                  >
-                    @{p.username}
-                  </strong>
-
-                  <p>{p.text}</p>
-                  {p.image && <img src={p.image} style={styles.image} />}
-
-                  <button onClick={() => toggleLike(p)}>
-                    {isLiked ? "💖" : "🤍"} {(p.likes || []).length}
-                  </button>
-                </div>
-              );
-            })}
+            {posts.map(p => (
+              <div key={p.id} style={styles.card}>
+                <strong onClick={() => setSelectedProfile({ id: p.userId, username: p.username })}>
+                  @{p.username}
+                </strong>
+                <p>{p.text}</p>
+                {p.image && <img src={p.image} style={styles.image} />}
+              </div>
+            ))}
           </>
         )}
 
@@ -246,6 +210,29 @@ function App() {
 
             <h2>@{selectedProfile.username}</h2>
 
+            {userData && (
+              <>
+                <p>
+                  Followers:{" "}
+                  <span onClick={() => setViewList("followers")}>
+                    {findUsers(users.find(u => u.id === selectedProfile.id)?.followers || []).length}
+                  </span>{" "}
+                  | Following:{" "}
+                  <span onClick={() => setViewList("following")}>
+                    {findUsers(users.find(u => u.id === selectedProfile.id)?.following || []).length}
+                  </span>
+                </p>
+
+                {selectedProfile.id !== user.uid && (
+                  <button onClick={() => toggleFollow(selectedProfile.id)}>
+                    {userData.following?.includes(selectedProfile.id)
+                      ? "Unfollow"
+                      : "Follow"}
+                  </button>
+                )}
+              </>
+            )}
+
             {userPosts(selectedProfile.id).map(p => (
               <div key={p.id} style={styles.card}>
                 <p>{p.text}</p>
@@ -255,73 +242,51 @@ function App() {
           </>
         )}
 
+        {/* FOLLOW LIST VIEW */}
+        {viewList && selectedProfile && (
+          <div style={styles.modal}>
+            <button onClick={() => setViewList(null)}>Close</button>
+
+            {findUsers(
+              users.find(u => u.id === selectedProfile.id)?.[viewList] || []
+            ).map(u => (
+              <div key={u.id} style={styles.card}>
+                @{u.username}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* SEARCH */}
         {tab === "search" && !selectedProfile && (
           <>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users..." />
 
-            {searchResults().map(u => (
-              <div
-                key={u.id}
-                style={styles.card}
-                onClick={() => setSelectedProfile(u)}
-              >
-                🔍 @{u.username}
-              </div>
-            ))}
+            {users
+              .filter(u => u.username?.toLowerCase().includes(search.toLowerCase()))
+              .map(u => (
+                <div
+                  key={u.id}
+                  style={styles.card}
+                  onClick={() => setSelectedProfile(u)}
+                >
+                  🔍 @{u.username}
+                </div>
+              ))}
           </>
         )}
 
         {/* NOTIFICATIONS */}
-        {tab === "notifications" && !selectedProfile && (
-          <>
-            <h2>Notifications</h2>
-
-            {notifications.map((n, i) => (
-              <div key={i} style={styles.card}>🔔 {n.text}</div>
-            ))}
-          </>
-        )}
-
-        {/* CHAT */}
-        {tab === "chat" && !selectedProfile && !chatUser && (
-          <>
-            <h2>Messages</h2>
-
-            {getConversations().map(c => (
-              <div
-                key={c.userId}
-                style={styles.card}
-                onClick={() => setChatUser({ id: c.userId, username: c.username })}
-              >
-                💬 @{c.username}
-              </div>
-            ))}
-          </>
-        )}
-
-        {tab === "chat" && chatUser && (
-          <>
-            <button onClick={() => setChatUser(null)}>← Back</button>
-
-            <h2>@{chatUser.username}</h2>
-
-            {getChatMessages().map((m, i) => (
-              <p key={i}>
-                <b>{m.from === user.uid ? "You" : m.username}</b>: {m.text}
-              </p>
-            ))}
-
-            <input value={chatText} onChange={e => setChatText(e.target.value)} />
-            <button onClick={sendMessage}>Send</button>
-          </>
+        {tab === "notifications" && (
+          notifications.map((n, i) => (
+            <div key={i} style={styles.card}>🔔 {n.text}</div>
+          ))
         )}
       </div>
 
       <div style={styles.nav}>
         <button onClick={() => setTab("home")}>🏠</button>
         <button onClick={() => setTab("search")}>🔍</button>
-        <button onClick={() => setTab("chat")}>💬</button>
         <button onClick={() => setTab("notifications")}>🔔</button>
       </div>
     </div>
@@ -346,6 +311,14 @@ const styles = {
     justifyContent: "space-around",
     background: "#1e293b",
     padding: 10
+  },
+  modal: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    background: "#0f172a",
+    padding: 20
   }
 };
 
