@@ -200,10 +200,15 @@ function App() {
     setText("");
   }
 
+  // 🔥 FIXED FEED (DISCOVERY MODE)
   function filteredPosts() {
     if (!userData) return posts;
 
     const following = userData.following || [];
+
+    if (following.length === 0) {
+      return posts; // show all posts if not following anyone
+    }
 
     return posts.filter(
       p => following.includes(p.userId) || p.userId === user.uid
@@ -220,7 +225,6 @@ function App() {
     <div style={styles.page}>
       <h1 style={styles.title}>Kiaroni 🔥</h1>
 
-      {/* USERNAME */}
       {!savedUsername && (
         <div style={styles.card}>
           <input
