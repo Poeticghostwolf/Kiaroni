@@ -53,7 +53,7 @@ function App() {
 
   const [notifications, setNotifications] = useState([]);
 
-  const [loading, setLoading] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState(null);
 
   useEffect(() => {
     async function init() {
@@ -87,7 +87,6 @@ function App() {
 
   async function saveUsername() {
     if (!username) return;
-
     await setDoc(doc(db, "users", user.uid), { username });
     setSavedUsername(username);
   }
@@ -103,8 +102,6 @@ function App() {
   async function createPost() {
     if (!text && !file) return;
 
-    setLoading(true);
-
     const imageUrl = await uploadImage(file);
 
     await addDoc(collection(db, "posts"), {
@@ -118,7 +115,6 @@ function App() {
 
     setText("");
     setFile(null);
-    setLoading(false);
   }
 
   async function toggleLike(post) {
@@ -197,6 +193,10 @@ function App() {
     );
   }
 
+  function userPosts(userId) {
+    return posts.filter(p => p.userId === userId);
+  }
+
   return (
     <div style={styles.app}>
       <div style={styles.container}>
@@ -210,22 +210,11 @@ function App() {
         )}
 
         {/* HOME */}
-        {tab === "home" && (
+        {tab === "home" && !selectedProfile && (
           <>
-            <input
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="Post..."
-            />
-
-            <input
-              type="file"
-              onChange={e => setFile(e.target.files[0])}
-            />
-
-            <button onClick={createPost}>
-              {loading ? "Uploading..." : "Post"}
-            </button>
+            <input value={text} onChange={e => setText(e.target.value)} placeholder="Post..." />
+            <input type="file" onChange={e => setFile(e.target.files[0])} />
+            <button onClick={createPost}>Post</button>
 
             {posts.map(p => {
               const isLiked = (p.likes || []).includes(user.uid);
@@ -233,10 +222,7 @@ function App() {
               return (
                 <div key={p.id} style={styles.card}>
                   <strong
-                    onClick={() => {
-                      setChatUser({ id: p.userId, username: p.username });
-                      setTab("chat");
-                    }}
+                    onClick={() => setSelectedProfile({ id: p.userId, username: p.username })}
                   >
                     @{p.username}
                   </strong>
@@ -253,23 +239,32 @@ function App() {
           </>
         )}
 
-        {/* SEARCH */}
-        {tab === "search" && (
+        {/* PROFILE */}
+        {selectedProfile && (
           <>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search users..."
-            />
+            <button onClick={() => setSelectedProfile(null)}>← Back</button>
+
+            <h2>@{selectedProfile.username}</h2>
+
+            {userPosts(selectedProfile.id).map(p => (
+              <div key={p.id} style={styles.card}>
+                <p>{p.text}</p>
+                {p.image && <img src={p.image} style={styles.image} />}
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* SEARCH */}
+        {tab === "search" && !selectedProfile && (
+          <>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users..." />
 
             {searchResults().map(u => (
               <div
                 key={u.id}
                 style={styles.card}
-                onClick={() => {
-                  setChatUser(u);
-                  setTab("chat");
-                }}
+                onClick={() => setSelectedProfile(u)}
               >
                 🔍 @{u.username}
               </div>
@@ -278,42 +273,33 @@ function App() {
         )}
 
         {/* NOTIFICATIONS */}
-        {tab === "notifications" && (
+        {tab === "notifications" && !selectedProfile && (
           <>
             <h2>Notifications</h2>
 
-            {notifications.length === 0 ? (
-              <div style={styles.card}>No notifications</div>
-            ) : (
-              notifications.map((n, i) => (
-                <div key={i} style={styles.card}>🔔 {n.text}</div>
-              ))
-            )}
-          </>
-        )}
-
-        {/* INBOX */}
-        {tab === "chat" && !chatUser && (
-          <>
-            <h2>Messages</h2>
-
-            {getConversations().length === 0 ? (
-              <div style={styles.card}>No messages yet</div>
-            ) : (
-              getConversations().map(c => (
-                <div
-                  key={c.userId}
-                  style={styles.card}
-                  onClick={() => setChatUser({ id: c.userId, username: c.username })}
-                >
-                  💬 @{c.username}
-                </div>
-              ))
-            )}
+            {notifications.map((n, i) => (
+              <div key={i} style={styles.card}>🔔 {n.text}</div>
+            ))}
           </>
         )}
 
         {/* CHAT */}
+        {tab === "chat" && !selectedProfile && !chatUser && (
+          <>
+            <h2>Messages</h2>
+
+            {getConversations().map(c => (
+              <div
+                key={c.userId}
+                style={styles.card}
+                onClick={() => setChatUser({ id: c.userId, username: c.username })}
+              >
+                💬 @{c.username}
+              </div>
+            ))}
+          </>
+        )}
+
         {tab === "chat" && chatUser && (
           <>
             <button onClick={() => setChatUser(null)}>← Back</button>
@@ -326,11 +312,7 @@ function App() {
               </p>
             ))}
 
-            <input
-              value={chatText}
-              onChange={e => setChatText(e.target.value)}
-              placeholder="Message..."
-            />
+            <input value={chatText} onChange={e => setChatText(e.target.value)} />
             <button onClick={sendMessage}>Send</button>
           </>
         )}
