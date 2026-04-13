@@ -39,7 +39,6 @@ function App() {
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
   const [savedUsername, setSavedUsername] = useState(null);
-
   const [userData, setUserData] = useState(null);
 
   const [posts, setPosts] = useState([]);
@@ -56,7 +55,7 @@ function App() {
   const [notifications, setNotifications] = useState([]);
 
   const [selectedProfile, setSelectedProfile] = useState(null);
-  const [viewList, setViewList] = useState(null); // followers/following modal
+  const [viewList, setViewList] = useState(null);
 
   useEffect(() => {
     async function init() {
@@ -93,6 +92,21 @@ function App() {
     init();
   }, []);
 
+  // 🔥 TRENDING FEED
+  function getTrendingPosts() {
+    return [...posts]
+      .map(p => {
+        const likes = (p.likes || []).length;
+        const age = Date.now() - p.createdAt;
+        const recencyBoost = age < 3600000 ? 20 : 0;
+        const randomBoost = Math.random() * 5;
+
+        const score = likes * 10 + recencyBoost + randomBoost;
+        return { ...p, score };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
   async function saveUsername() {
     if (!username) return;
 
@@ -124,7 +138,6 @@ function App() {
       await updateDoc(myRef, {
         following: following.filter(id => id !== targetId)
       });
-
       await updateDoc(theirRef, {
         followers: followers.filter(id => id !== user.uid)
       });
@@ -132,7 +145,6 @@ function App() {
       await updateDoc(myRef, {
         following: [...following, targetId]
       });
-
       await updateDoc(theirRef, {
         followers: [...followers, user.uid]
       });
@@ -164,6 +176,47 @@ function App() {
     setFile(null);
   }
 
+  async function toggleLike(post) {
+    const refDoc = doc(db, "posts", post.id);
+    const likes = post.likes || [];
+
+    const isLiked = likes.includes(user.uid);
+
+    const updated = isLiked
+      ? likes.filter(id => id !== user.uid)
+      : [...likes, user.uid];
+
+    await updateDoc(refDoc, { likes: updated });
+
+    if (!isLiked && post.userId !== user.uid) {
+      await addDoc(collection(db, "notifications"), {
+        text: `${savedUsername} liked your post`,
+        toUser: post.userId,
+        createdAt: Date.now()
+      });
+    }
+  }
+
+  async function sendMessage() {
+    if (!chatText || !chatUser) return;
+
+    await addDoc(collection(db, "messages"), {
+      text: chatText,
+      from: user.uid,
+      to: chatUser.id,
+      username: savedUsername,
+      createdAt: Date.now()
+    });
+
+    await addDoc(collection(db, "notifications"), {
+      text: `${savedUsername} sent you a message`,
+      toUser: chatUser.id,
+      createdAt: Date.now()
+    });
+
+    setChatText("");
+  }
+
   function userPosts(userId) {
     return posts.filter(p => p.userId === userId);
   }
@@ -191,13 +244,42 @@ function App() {
             <input type="file" onChange={e => setFile(e.target.files[0])} />
             <button onClick={createPost}>Post</button>
 
-            {posts.map(p => (
+            {getTrendingPosts().map(p => (
               <div key={p.id} style={styles.card}>
                 <strong onClick={() => setSelectedProfile({ id: p.userId, username: p.username })}>
                   @{p.username}
                 </strong>
+
                 <p>{p.text}</p>
                 {p.image && <img src={p.image} style={styles.image} />}
+
+                {/* ACTION BAR */}
+                <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                  <button onClick={() => toggleLike(p)}>
+                    {(p.likes || []).includes(user.uid) ? "💖" : "🤍"} {(p.likes || []).length}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setChatUser({ id: p.userId, username: p.username });
+                      setTab("chat");
+                    }}
+                  >
+                    💬
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      addDoc(collection(db, "reports"), {
+                        postId: p.id,
+                        createdAt: Date.now()
+                      });
+                      alert("Reported");
+                    }}
+                  >
+                    🚨
+                  </button>
+                </div>
               </div>
             ))}
           </>
@@ -207,30 +289,23 @@ function App() {
         {selectedProfile && (
           <>
             <button onClick={() => setSelectedProfile(null)}>← Back</button>
-
             <h2>@{selectedProfile.username}</h2>
 
-            {userData && (
-              <>
-                <p>
-                  Followers:{" "}
-                  <span onClick={() => setViewList("followers")}>
-                    {findUsers(users.find(u => u.id === selectedProfile.id)?.followers || []).length}
-                  </span>{" "}
-                  | Following:{" "}
-                  <span onClick={() => setViewList("following")}>
-                    {findUsers(users.find(u => u.id === selectedProfile.id)?.following || []).length}
-                  </span>
-                </p>
+            <p>
+              Followers:{" "}
+              <span onClick={() => setViewList("followers")}>
+                {findUsers(users.find(u => u.id === selectedProfile.id)?.followers || []).length}
+              </span>{" "}
+              | Following:{" "}
+              <span onClick={() => setViewList("following")}>
+                {findUsers(users.find(u => u.id === selectedProfile.id)?.following || []).length}
+              </span>
+            </p>
 
-                {selectedProfile.id !== user.uid && (
-                  <button onClick={() => toggleFollow(selectedProfile.id)}>
-                    {userData.following?.includes(selectedProfile.id)
-                      ? "Unfollow"
-                      : "Follow"}
-                  </button>
-                )}
-              </>
+            {selectedProfile.id !== user.uid && (
+              <button onClick={() => toggleFollow(selectedProfile.id)}>
+                {userData?.following?.includes(selectedProfile.id) ? "Unfollow" : "Follow"}
+              </button>
             )}
 
             {userPosts(selectedProfile.id).map(p => (
@@ -241,53 +316,13 @@ function App() {
             ))}
           </>
         )}
-
-        {/* FOLLOW LIST VIEW */}
-        {viewList && selectedProfile && (
-          <div style={styles.modal}>
-            <button onClick={() => setViewList(null)}>Close</button>
-
-            {findUsers(
-              users.find(u => u.id === selectedProfile.id)?.[viewList] || []
-            ).map(u => (
-              <div key={u.id} style={styles.card}>
-                @{u.username}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* SEARCH */}
-        {tab === "search" && !selectedProfile && (
-          <>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users..." />
-
-            {users
-              .filter(u => u.username?.toLowerCase().includes(search.toLowerCase()))
-              .map(u => (
-                <div
-                  key={u.id}
-                  style={styles.card}
-                  onClick={() => setSelectedProfile(u)}
-                >
-                  🔍 @{u.username}
-                </div>
-              ))}
-          </>
-        )}
-
-        {/* NOTIFICATIONS */}
-        {tab === "notifications" && (
-          notifications.map((n, i) => (
-            <div key={i} style={styles.card}>🔔 {n.text}</div>
-          ))
-        )}
       </div>
 
       <div style={styles.nav}>
         <button onClick={() => setTab("home")}>🏠</button>
         <button onClick={() => setTab("search")}>🔍</button>
         <button onClick={() => setTab("notifications")}>🔔</button>
+        <button onClick={() => setTab("chat")}>💬</button>
       </div>
     </div>
   );
@@ -311,14 +346,6 @@ const styles = {
     justifyContent: "space-around",
     background: "#1e293b",
     padding: 10
-  },
-  modal: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    background: "#0f172a",
-    padding: 20
   }
 };
 
