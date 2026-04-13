@@ -54,9 +54,10 @@ function App() {
   const [chatText, setChatText] = useState("");
 
   const [users, setUsers] = useState([]);
-  const [search, setSearch] = useState("");
-
   const [notifications, setNotifications] = useState([]);
+
+  const [comments, setComments] = useState([]);
+  const [commentInputs, setCommentInputs] = useState({});
 
   const [selectedProfile, setSelectedProfile] = useState(null);
 
@@ -93,12 +94,15 @@ function App() {
         const data = snap.docs.map(d => d.data());
         setNotifications(data.filter(n => n.toUser === res.user.uid));
       });
+
+      onSnapshot(collection(db, "comments"), snap => {
+        setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
     }
 
     init();
   }, []);
 
-  // 🔥 FOR YOU
   function getTrendingPosts() {
     return [...posts]
       .map(p => {
@@ -112,7 +116,6 @@ function App() {
       .sort((a, b) => b.score - a.score);
   }
 
-  // 👥 FOLLOWING
   function getFollowingPosts() {
     if (!userData?.following) return [];
     return posts
@@ -231,32 +234,27 @@ function App() {
     }
   }
 
-  async function sendMessage() {
-    if (!chatText || !chatUser) return;
+  async function addComment(postId) {
+    const text = commentInputs[postId];
+    if (!text) return;
 
-    await addDoc(collection(db, "messages"), {
-      text: chatText,
-      from: user.uid,
-      to: chatUser.id,
+    await addDoc(collection(db, "comments"), {
+      postId,
+      text,
+      userId: user.uid,
       username: savedUsername,
       createdAt: Date.now()
     });
 
-    await addDoc(collection(db, "notifications"), {
-      text: `${savedUsername} sent you a message`,
-      toUser: chatUser.id,
-      createdAt: Date.now()
-    });
-
-    setChatText("");
-  }
-
-  function userPosts(userId) {
-    return posts.filter(p => p.userId === userId);
+    setCommentInputs(prev => ({ ...prev, [postId]: "" }));
   }
 
   function getUserData(id) {
     return users.find(u => u.id === id) || {};
+  }
+
+  function userPosts(userId) {
+    return posts.filter(p => p.userId === userId);
   }
 
   return (
@@ -271,7 +269,6 @@ function App() {
           </>
         )}
 
-        {/* HOME */}
         {tab === "home" && !selectedProfile && (
           <>
             <div style={{ display: "flex", gap: 10 }}>
@@ -304,10 +301,9 @@ function App() {
                       {(p.likes || []).includes(user.uid) ? "💖" : "🤍"} {(p.likes || []).length}
                     </button>
 
-                    <button onClick={() => {
-                      setChatUser({ id: p.userId, username: p.username });
-                      setTab("chat");
-                    }}>💬</button>
+                    <button onClick={() => setChatUser({ id: p.userId, username: p.username })}>
+                      💬
+                    </button>
 
                     <button onClick={() => {
                       addDoc(collection(db, "reports"), {
@@ -315,7 +311,31 @@ function App() {
                         createdAt: Date.now()
                       });
                       alert("Reported");
-                    }}>🚨</button>
+                    }}>
+                      🚨
+                    </button>
+                  </div>
+
+                  {/* COMMENTS */}
+                  <div style={{ marginTop: 10 }}>
+                    {comments.filter(c => c.postId === p.id).map(c => (
+                      <div key={c.id}>
+                        <strong>@{c.username}</strong>: {c.text}
+                      </div>
+                    ))}
+
+                    <input
+                      placeholder="Write a comment..."
+                      value={commentInputs[p.id] || ""}
+                      onChange={e =>
+                        setCommentInputs(prev => ({
+                          ...prev,
+                          [p.id]: e.target.value
+                        }))
+                      }
+                    />
+
+                    <button onClick={() => addComment(p.id)}>Post</button>
                   </div>
                 </div>
               );
@@ -323,24 +343,7 @@ function App() {
           </>
         )}
 
-        {/* PROFILE TAB */}
-        {tab === "profile" && !selectedProfile && (
-          <>
-            <h2>Your Profile</h2>
-
-            {userData?.avatar && (
-              <img src={userData.avatar} style={{ width: 100, borderRadius: "50%" }} />
-            )}
-
-            <input type="file" onChange={e => setAvatarFile(e.target.files[0])} />
-
-            <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Bio..." />
-
-            <button onClick={updateProfile}>Save Profile</button>
-          </>
-        )}
-
-        {/* OTHER PROFILE */}
+        {/* PROFILE */}
         {selectedProfile && (
           <>
             <button onClick={() => setSelectedProfile(null)}>← Back</button>
@@ -362,18 +365,31 @@ function App() {
             {userPosts(selectedProfile.id).map(p => (
               <div key={p.id} style={styles.card}>
                 <p>{p.text}</p>
-                {p.image && <img src={p.image} style={styles.image} />}
               </div>
             ))}
+          </>
+        )}
+
+        {/* MY PROFILE */}
+        {tab === "profile" && !selectedProfile && (
+          <>
+            <h2>Your Profile</h2>
+
+            {userData?.avatar && (
+              <img src={userData.avatar} style={{ width: 100, borderRadius: "50%" }} />
+            )}
+
+            <input type="file" onChange={e => setAvatarFile(e.target.files[0])} />
+
+            <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Bio..." />
+
+            <button onClick={updateProfile}>Save Profile</button>
           </>
         )}
       </div>
 
       <div style={styles.nav}>
         <button onClick={() => setTab("home")}>🏠</button>
-        <button onClick={() => setTab("search")}>🔍</button>
-        <button onClick={() => setTab("notifications")}>🔔</button>
-        <button onClick={() => setTab("chat")}>💬</button>
         <button onClick={() => setTab("profile")}>👤</button>
       </div>
     </div>
@@ -383,12 +399,7 @@ function App() {
 const styles = {
   app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
   container: { maxWidth: 500, margin: "auto", padding: 20 },
-  card: {
-    background: "#1e293b",
-    padding: 10,
-    marginTop: 10,
-    borderRadius: 10
-  },
+  card: { background: "#1e293b", padding: 10, marginTop: 10, borderRadius: 10 },
   image: { width: "100%", borderRadius: 10 },
   nav: {
     position: "fixed",
