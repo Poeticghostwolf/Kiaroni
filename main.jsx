@@ -38,6 +38,7 @@ function App() {
   const [animatingLike, setAnimatingLike] = useState(null);
 
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const [commentText, setCommentText] = useState({});
   const [comments, setComments] = useState([]);
@@ -88,7 +89,9 @@ function App() {
       onSnapshot(notifQuery, (snapshot) => {
         const data = snapshot.docs.map(d => d.data());
         const mine = data.filter(n => n.toUser === res.user.uid);
+
         setNotifications(mine);
+        setUnreadCount(mine.length);
       });
 
       // 💬 COMMENTS
@@ -186,7 +189,6 @@ function App() {
     setText("");
   }
 
-  // 💬 ADD COMMENT + NOTIFICATION
   async function addComment(postId, postUserId) {
     const text = commentText[postId];
     if (!text) return;
@@ -239,9 +241,17 @@ function App() {
     <div style={styles.page}>
       <h1 style={styles.title}>Kiaroni 🔥</h1>
 
+      {/* 🔔 BELL */}
+      <div style={styles.bellContainer}>
+        🔔
+        {unreadCount > 0 && (
+          <span style={styles.badge}>{unreadCount}</span>
+        )}
+      </div>
+
       {/* 🔔 NOTIFICATIONS */}
       {notifications.length > 0 && (
-        <div style={styles.card}>
+        <div style={styles.card} onClick={() => setUnreadCount(0)}>
           <h3>🔔 Notifications</h3>
           {notifications.slice(0, 3).map((n, i) => (
             <p key={i} style={{ fontSize: 14 }}>
@@ -439,7 +449,22 @@ const styles = {
     padding: 10,
     borderRadius: 8
   },
-  backBtn: { marginBottom: 10 }
+  backBtn: { marginBottom: 10 },
+  bellContainer: {
+    position: "relative",
+    fontSize: 24,
+    marginBottom: 10
+  },
+  badge: {
+    position: "absolute",
+    top: -5,
+    right: -10,
+    background: "red",
+    color: "white",
+    borderRadius: "50%",
+    padding: "2px 6px",
+    fontSize: 12
+  }
 };
 
 createRoot(document.getElementById("root")).render(<App />);
