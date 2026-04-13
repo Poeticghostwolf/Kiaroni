@@ -14,15 +14,24 @@ import {
   updateDoc
 } from "firebase/firestore";
 
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "firebase/storage";
+
 const firebaseConfig = {
   apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
-  projectId: "kiaroni"
+  projectId: "kiaroni",
+  storageBucket: "kiaroni.appspot.com"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 function App() {
   const [tab, setTab] = useState("home");
@@ -33,7 +42,7 @@ function App() {
 
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
-  const [image, setImage] = useState("");
+  const [file, setFile] = useState(null);
 
   const [messages, setMessages] = useState([]);
   const [chatUser, setChatUser] = useState(null);
@@ -44,7 +53,7 @@ function App() {
 
   const [notifications, setNotifications] = useState([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -52,7 +61,6 @@ function App() {
       setUser(res.user);
 
       const userRef = doc(db, "users", res.user.uid);
-
       const snap = await getDoc(userRef);
       if (snap.exists()) setSavedUsername(snap.data().username);
 
@@ -62,7 +70,6 @@ function App() {
 
       onSnapshot(collection(db, "posts"), snap => {
         setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        setLoading(false);
       });
 
       onSnapshot(collection(db, "messages"), snap => {
@@ -81,19 +88,28 @@ function App() {
   async function saveUsername() {
     if (!username) return;
 
-    await setDoc(doc(db, "users", user.uid), {
-      username
-    });
-
+    await setDoc(doc(db, "users", user.uid), { username });
     setSavedUsername(username);
   }
 
+  async function uploadImage(file) {
+    if (!file) return null;
+
+    const storageRef = ref(storage, `posts/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  }
+
   async function createPost() {
-    if (!text && !image) return;
+    if (!text && !file) return;
+
+    setLoading(true);
+
+    const imageUrl = await uploadImage(file);
 
     await addDoc(collection(db, "posts"), {
       text,
-      image,
+      image: imageUrl || "",
       userId: user.uid,
       username: savedUsername,
       likes: [],
@@ -101,11 +117,12 @@ function App() {
     });
 
     setText("");
-    setImage("");
+    setFile(null);
+    setLoading(false);
   }
 
   async function toggleLike(post) {
-    const ref = doc(db, "posts", post.id);
+    const refDoc = doc(db, "posts", post.id);
     const likes = post.likes || [];
 
     const isLiked = likes.includes(user.uid);
@@ -114,9 +131,8 @@ function App() {
       ? likes.filter(id => id !== user.uid)
       : [...likes, user.uid];
 
-    await updateDoc(ref, { likes: updated });
+    await updateDoc(refDoc, { likes: updated });
 
-    // 🔔 NOTIFY (only when liking, not unliking)
     if (!isLiked && post.userId !== user.uid) {
       await addDoc(collection(db, "notifications"), {
         text: `${savedUsername} liked your post`,
@@ -181,8 +197,6 @@ function App() {
     );
   }
 
-  if (loading) return <p>Loading...</p>;
-
   return (
     <div style={styles.app}>
       <div style={styles.container}>
@@ -190,11 +204,7 @@ function App() {
 
         {!savedUsername && (
           <>
-            <input
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="Choose username"
-            />
+            <input value={username} onChange={e => setUsername(e.target.value)} />
             <button onClick={saveUsername}>Save</button>
           </>
         )}
@@ -207,12 +217,15 @@ function App() {
               onChange={e => setText(e.target.value)}
               placeholder="Post..."
             />
+
             <input
-              value={image}
-              onChange={e => setImage(e.target.value)}
-              placeholder="Image URL"
+              type="file"
+              onChange={e => setFile(e.target.files[0])}
             />
-            <button onClick={createPost}>Post</button>
+
+            <button onClick={createPost}>
+              {loading ? "Uploading..." : "Post"}
+            </button>
 
             {posts.map(p => {
               const isLiked = (p.likes || []).includes(user.uid);
@@ -270,12 +283,10 @@ function App() {
             <h2>Notifications</h2>
 
             {notifications.length === 0 ? (
-              <div style={styles.card}>No notifications yet</div>
+              <div style={styles.card}>No notifications</div>
             ) : (
               notifications.map((n, i) => (
-                <div key={i} style={styles.card}>
-                  🔔 {n.text}
-                </div>
+                <div key={i} style={styles.card}>🔔 {n.text}</div>
               ))
             )}
           </>
@@ -287,9 +298,7 @@ function App() {
             <h2>Messages</h2>
 
             {getConversations().length === 0 ? (
-              <div style={styles.card}>
-                No messages yet — search users 🔍
-              </div>
+              <div style={styles.card}>No messages yet</div>
             ) : (
               getConversations().map(c => (
                 <div
