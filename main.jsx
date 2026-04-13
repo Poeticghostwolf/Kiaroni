@@ -35,6 +35,7 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   const [viewProfile, setViewProfile] = useState(null);
+  const [animatingLike, setAnimatingLike] = useState(null);
 
   useEffect(() => {
     async function init() {
@@ -106,6 +107,9 @@ function App() {
       updatedLikes = [...currentLikes, user.uid];
       await updateTrust(post.userId, 1);
     }
+
+    setAnimatingLike(post.id);
+    setTimeout(() => setAnimatingLike(null), 200);
 
     await updateDoc(ref, { likes: updatedLikes });
   }
@@ -185,12 +189,7 @@ function App() {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Choose username"
           />
-          <button
-            style={styles.primaryBtn}
-            onClick={saveUsername}
-            onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.95)"}
-            onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
-          >
+          <button style={styles.primaryBtn} onClick={saveUsername}>
             Save
           </button>
         </div>
@@ -205,30 +204,19 @@ function App() {
           onChange={(e) => setText(e.target.value)}
           placeholder="What's happening?"
         />
-        <button
-          style={styles.primaryBtn}
-          onClick={createPost}
-          onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.95)"}
-          onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
-        >
+        <button style={styles.primaryBtn} onClick={createPost}>
           Post
         </button>
       </div>
 
       {posts.map(p => {
         const liked = (p.likes || []).includes(user.uid);
+        const isAnimating = animatingLike === p.id;
 
         return (
-          <div
-            key={p.id}
-            style={styles.card}
-            onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.02)"}
-            onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
-          >
+          <div key={p.id} style={styles.cardAnimated}>
             {(p.trustScore || 50) < 40 ? (
-              <div style={styles.warning}>
-                ⚠️ Hidden due to low trust
-              </div>
+              <div style={styles.warning}>⚠️ Hidden due to low trust</div>
             ) : (
               <>
                 <div style={styles.header}>
@@ -247,7 +235,10 @@ function App() {
 
                 <div style={styles.actions}>
                   <button
-                    style={styles.likeBtn}
+                    style={{
+                      ...styles.likeBtn,
+                      transform: isAnimating ? "scale(1.3)" : "scale(1)"
+                    }}
                     onClick={() => toggleLike(p)}
                   >
                     {liked ? "💔" : "❤️"} {(p.likes || []).length}
@@ -280,13 +271,19 @@ const styles = {
     fontFamily: "system-ui"
   },
   title: { textAlign: "center", marginBottom: 20 },
-  usernameDisplay: { textAlign: "center", marginBottom: 20, opacity: 0.8 },
+  usernameDisplay: { textAlign: "center", marginBottom: 20 },
   card: {
     background: "#1e293b",
     padding: 15,
     borderRadius: 12,
+    marginBottom: 15
+  },
+  cardAnimated: {
+    background: "#1e293b",
+    padding: 15,
+    borderRadius: 12,
     marginBottom: 15,
-    transition: "all 0.2s ease"
+    animation: "fadeIn 0.4s ease"
   },
   input: {
     width: "100%",
@@ -302,8 +299,7 @@ const styles = {
     border: "none",
     background: "#3b82f6",
     color: "#fff",
-    cursor: "pointer",
-    transition: "all 0.1s ease"
+    cursor: "pointer"
   },
   header: { marginBottom: 8 },
   username: { fontWeight: "bold", cursor: "pointer" },
@@ -314,7 +310,8 @@ const styles = {
     border: "none",
     padding: "6px 10px",
     borderRadius: 8,
-    cursor: "pointer"
+    cursor: "pointer",
+    transition: "all 0.15s ease"
   },
   reportBtn: {
     background: "#7f1d1d",
