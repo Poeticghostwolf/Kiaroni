@@ -50,6 +50,11 @@ function App() {
 
   const [notifications, setNotifications] = useState([]);
 
+  // NEW
+  const [users, setUsers] = useState([]);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [userData, setUserData] = useState(null);
+
   useEffect(() => {
     async function init() {
       const res = await signInAnonymously(auth);
@@ -58,6 +63,14 @@ function App() {
       const userRef = doc(db, "users", res.user.uid);
       const snap = await getDoc(userRef);
       if (snap.exists()) setSavedUsername(snap.data().username);
+
+      onSnapshot(userRef, s => {
+        if (s.exists()) setUserData(s.data());
+      });
+
+      onSnapshot(collection(db, "users"), snap => {
+        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
       onSnapshot(collection(db, "posts"), snap => {
         setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -98,6 +111,14 @@ function App() {
     });
 
     return Object.keys(map);
+  }
+
+  function getUser(id) {
+    return users.find(u => u.id === id) || {};
+  }
+
+  function getUserPosts(id) {
+    return posts.filter(p => p.userId === id);
   }
 
   async function sendMessage() {
@@ -151,6 +172,35 @@ function App() {
     await updateDoc(refDoc, { likes: updated });
   }
 
+  async function toggleFollow(targetId) {
+    const myRef = doc(db, "users", user.uid);
+    const theirRef = doc(db, "users", targetId);
+
+    const mySnap = await getDoc(myRef);
+    const theirSnap = await getDoc(theirRef);
+
+    const following = mySnap.data()?.following || [];
+    const followers = theirSnap.data()?.followers || [];
+
+    const isFollowing = following.includes(targetId);
+
+    if (isFollowing) {
+      await updateDoc(myRef, {
+        following: following.filter(id => id !== targetId)
+      });
+      await updateDoc(theirRef, {
+        followers: followers.filter(id => id !== user.uid)
+      });
+    } else {
+      await updateDoc(myRef, {
+        following: [...following, targetId]
+      });
+      await updateDoc(theirRef, {
+        followers: [...followers, user.uid]
+      });
+    }
+  }
+
   return (
     <div style={styles.app}>
       <div style={styles.container}>
@@ -162,7 +212,11 @@ function App() {
             <button
               onClick={async () => {
                 if (!username) return;
-                await setDoc(doc(db, "users", user.uid), { username });
+                await setDoc(doc(db, "users", user.uid), {
+                  username,
+                  followers: [],
+                  following: []
+                });
                 setSavedUsername(username);
               }}
             >
@@ -171,8 +225,36 @@ function App() {
           </>
         )}
 
+        {/* PROFILE VIEW */}
+        {selectedProfile && (
+          <>
+            <button onClick={() => setSelectedProfile(null)}>← Back</button>
+
+            <h2>@{selectedProfile.username}</h2>
+
+            <p>
+              Followers: {(getUser(selectedProfile.id).followers || []).length} |
+              Following: {(getUser(selectedProfile.id).following || []).length}
+            </p>
+
+            {selectedProfile.id !== user?.uid && (
+              <button onClick={() => toggleFollow(selectedProfile.id)}>
+                {userData?.following?.includes(selectedProfile.id)
+                  ? "Unfollow"
+                  : "Follow"}
+              </button>
+            )}
+
+            {getUserPosts(selectedProfile.id).map(p => (
+              <div key={p.id} style={styles.card}>
+                <p>{p.text}</p>
+              </div>
+            ))}
+          </>
+        )}
+
         {/* HOME */}
-        {tab === "home" && (
+        {!selectedProfile && tab === "home" && (
           <>
             <div style={styles.postBox}>
               <textarea
@@ -192,21 +274,31 @@ function App() {
 
             {posts.map(p => (
               <div key={p.id} style={styles.card}>
-                <strong>@{p.username}</strong>
+                <strong
+                  style={{ cursor: "pointer" }}
+                  onClick={() =>
+                    setSelectedProfile({
+                      id: p.userId,
+                      username: p.username
+                    })
+                  }
+                >
+                  @{p.username}
+                </strong>
+
                 <p>{p.text}</p>
 
                 {p.image && <img src={p.image} style={styles.image} />}
 
                 <div style={styles.actions}>
-                  <button onClick={() => toggleLike(p)} style={styles.actionBtn}>
-                    {(p.likes || []).includes(user?.uid) ? "❤️" : "🤍"} {(p.likes || []).length}
+                  <button onClick={() => toggleLike(p)}>
+                    ❤️ {(p.likes || []).length}
                   </button>
 
                   <button
                     onClick={() =>
                       setChatUser({ id: p.userId, username: p.username })
                     }
-                    style={styles.actionBtn}
                   >
                     💬
                   </button>
@@ -220,7 +312,6 @@ function App() {
                         createdAt: Date.now()
                       })
                     }
-                    style={styles.actionBtn}
                   >
                     🚨
                   </button>
@@ -231,15 +322,12 @@ function App() {
         )}
 
         {/* INBOX */}
-        {tab === "inbox" && (
+        {!selectedProfile && tab === "inbox" && (
           <>
             <h2>Messages</h2>
             {getConversations().map(id => (
               <div key={id} style={styles.card}>
-                <button
-                  onClick={() => setChatUser({ id, username: id })}
-                  style={styles.actionBtn}
-                >
+                <button onClick={() => setChatUser({ id, username: id })}>
                   Chat with {id}
                 </button>
               </div>
@@ -248,7 +336,7 @@ function App() {
         )}
 
         {/* NOTIFICATIONS */}
-        {tab === "notifications" && (
+        {!selectedProfile && tab === "notifications" && (
           <>
             <h2>Notifications</h2>
             {notifications.map((n, i) => (
@@ -259,8 +347,8 @@ function App() {
           </>
         )}
 
-        {/* PROFILE */}
-        {tab === "profile" && (
+        {/* PROFILE TAB */}
+        {!selectedProfile && tab === "profile" && (
           <>
             <h2>Your Profile</h2>
             <p>@{savedUsername}</p>
@@ -268,41 +356,21 @@ function App() {
         )}
       </div>
 
-      {/* CHAT MODAL */}
+      {/* CHAT */}
       {chatUser && (
         <div style={styles.chatBox}>
           <h4>@{chatUser.username}</h4>
 
-          <div style={{ flex: 1, overflowY: "auto", paddingRight: 5 }}>
+          <div style={{ flex: 1, overflowY: "auto" }}>
             {getChatMessages(chatUser.id).map(m => (
-              <div
-                key={m.id}
-                style={{
-                  textAlign: m.from === user.uid ? "right" : "left",
-                  marginBottom: 6
-                }}
-              >
-                <span
-                  style={{
-                    background:
-                      m.from === user.uid ? "#6366f1" : "#334155",
-                    padding: "8px 12px",
-                    borderRadius: 12,
-                    display: "inline-block",
-                    maxWidth: "70%"
-                  }}
-                >
-                  {m.text}
-                </span>
+              <div key={m.id}>
+                {m.from === user.uid ? "Me: " : "Them: "}
+                {m.text}
               </div>
             ))}
           </div>
 
-          <input
-            value={chatText}
-            onChange={e => setChatText(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && sendMessage()}
-          />
+          <input value={chatText} onChange={e => setChatText(e.target.value)} />
           <button onClick={sendMessage}>Send</button>
           <button onClick={() => setChatUser(null)}>Close</button>
         </div>
@@ -310,21 +378,22 @@ function App() {
 
       {/* NAV */}
       <div style={styles.nav}>
-        {[
-          { id: "home", icon: "🏠" },
-          { id: "inbox", icon: "💬" },
-          { id: "notifications", icon: "🔔" },
-          { id: "profile", icon: "👤" }
-        ].map(t => (
+        {["home", "inbox", "notifications", "profile"].map(t => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={t}
+            onClick={() => setTab(t)}
             style={{
               ...styles.navBtn,
-              color: tab === t.id ? "#6366f1" : "#fff"
+              color: tab === t ? "#6366f1" : "#fff"
             }}
           >
-            {t.icon}
+            {t === "home"
+              ? "🏠"
+              : t === "inbox"
+              ? "💬"
+              : t === "notifications"
+              ? "🔔"
+              : "👤"}
           </button>
         ))}
       </div>
@@ -333,103 +402,36 @@ function App() {
 }
 
 const styles = {
-  app: {
-    background: "linear-gradient(to bottom, #0f172a, #1e3a8a)",
-    minHeight: "100vh",
-    color: "#fff"
-  },
-
-  container: {
-    maxWidth: 800,
-    margin: "auto",
-    padding: 20
-  },
-
-  postBox: {
-    background: "#1e293b",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 15
-  },
-
-  textarea: {
-    width: "100%",
-    minHeight: 60,
-    background: "transparent",
-    border: "none",
-    color: "#fff",
-    outline: "none"
-  },
-
-  postActions: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginTop: 10
-  },
-
-  postBtn: {
-    background: "#6366f1",
-    border: "none",
-    padding: "6px 12px",
-    borderRadius: 6,
-    color: "#fff"
-  },
-
-  card: {
-    background: "rgba(30,41,59,0.9)",
-    padding: 15,
-    marginTop: 15,
-    borderRadius: 15
-  },
-
-  image: {
-    width: "100%",
-    borderRadius: 10
-  },
-
-  actions: {
-    display: "flex",
-    gap: 15,
-    marginTop: 10
-  },
-
-  actionBtn: {
-    background: "none",
-    border: "none",
-    color: "#fff",
-    cursor: "pointer"
-  },
-
+  app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
+  container: { maxWidth: 800, margin: "auto", padding: 20 },
+  postBox: { background: "#1e293b", padding: 10, borderRadius: 10 },
+  textarea: { width: "100%", background: "transparent", color: "#fff" },
+  postActions: { display: "flex", justifyContent: "space-between" },
+  postBtn: { background: "#6366f1", border: "none", color: "#fff" },
+  card: { background: "#1e293b", padding: 10, marginTop: 10, borderRadius: 10 },
+  image: { width: "100%" },
+  actions: { display: "flex", gap: 10 },
   chatBox: {
     position: "fixed",
     top: "50%",
     left: "50%",
     transform: "translate(-50%, -50%)",
-    width: 350,
+    width: 300,
     height: 400,
     background: "#1e293b",
-    padding: 15,
-    borderRadius: 15,
+    padding: 10,
     display: "flex",
     flexDirection: "column"
   },
-
   nav: {
     position: "fixed",
     bottom: 0,
     width: "100%",
     display: "flex",
     justifyContent: "space-around",
-    background: "#1e293b",
-    padding: 10
+    background: "#1e293b"
   },
-
-  navBtn: {
-    background: "none",
-    border: "none",
-    fontSize: 20,
-    cursor: "pointer"
-  }
+  navBtn: { background: "none", border: "none", fontSize: 20 }
 };
 
 createRoot(document.getElementById("root")).render(<App />);
