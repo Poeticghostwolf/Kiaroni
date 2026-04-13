@@ -86,8 +86,10 @@ function App() {
         setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
+      // ✅ FIXED MESSAGES
       onSnapshot(collection(db, "messages"), snap => {
-        setMessages(snap.docs.map(d => d.data()));
+        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMessages(msgs);
       });
 
       onSnapshot(collection(db, "notifications"), snap => {
@@ -103,106 +105,64 @@ function App() {
     init();
   }, []);
 
+  // ✅ CHAT FILTER
+  function getChatMessages() {
+    if (!chatUser || !user) return [];
+
+    return messages
+      .filter(
+        m =>
+          (m.from === user.uid && m.to === chatUser.id) ||
+          (m.from === chatUser.id && m.to === user.uid)
+      )
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  // ✅ SEND MESSAGE
+  async function sendMessage() {
+    if (!chatText.trim() || !chatUser) return;
+
+    await addDoc(collection(db, "messages"), {
+      text: chatText,
+      from: user.uid,
+      to: chatUser.id,
+      createdAt: Date.now()
+    });
+
+    setChatText("");
+
+    await addDoc(collection(db, "notifications"), {
+      text: `${savedUsername} sent you a message`,
+      toUser: chatUser.id,
+      createdAt: Date.now()
+    });
+  }
+
   function getTrendingPosts() {
     return [...posts]
       .map(p => {
         const likes = (p.likes || []).length;
         const age = Date.now() - p.createdAt;
         const recencyBoost = age < 3600000 ? 20 : 0;
-        const randomBoost = Math.random() * 5;
-        const score = likes * 10 + recencyBoost + randomBoost;
-        return { ...p, score };
+        return { ...p, score: likes * 10 + recencyBoost };
       })
       .sort((a, b) => b.score - a.score);
-  }
-
-  function getFollowingPosts() {
-    if (!userData?.following) return [];
-    return posts
-      .filter(p => userData.following.includes(p.userId))
-      .sort((a, b) => b.createdAt - a.createdAt);
-  }
-
-  async function saveUsername() {
-    if (!username) return;
-
-    await setDoc(doc(db, "users", user.uid), {
-      username,
-      bio: "",
-      avatar: "",
-      followers: [],
-      following: []
-    });
-
-    setSavedUsername(username);
-  }
-
-  async function uploadAvatar(file) {
-    if (!file) return null;
-    const storageRef = ref(storage, `avatars/${user.uid}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-  }
-
-  async function updateProfile() {
-    let avatarUrl = userData?.avatar || "";
-
-    if (avatarFile) {
-      avatarUrl = await uploadAvatar(avatarFile);
-    }
-
-    await updateDoc(doc(db, "users", user.uid), {
-      bio,
-      avatar: avatarUrl
-    });
-
-    setAvatarFile(null);
-  }
-
-  async function toggleFollow(targetId) {
-    const myRef = doc(db, "users", user.uid);
-    const theirRef = doc(db, "users", targetId);
-
-    const mySnap = await getDoc(myRef);
-    const theirSnap = await getDoc(theirRef);
-
-    const following = mySnap.data()?.following || [];
-    const followers = theirSnap.data()?.followers || [];
-
-    const isFollowing = following.includes(targetId);
-
-    if (isFollowing) {
-      await updateDoc(myRef, {
-        following: following.filter(id => id !== targetId)
-      });
-      await updateDoc(theirRef, {
-        followers: followers.filter(id => id !== user.uid)
-      });
-    } else {
-      await updateDoc(myRef, {
-        following: [...following, targetId]
-      });
-      await updateDoc(theirRef, {
-        followers: [...followers, user.uid]
-      });
-    }
-  }
-
-  async function uploadImage(file) {
-    if (!file) return null;
-    const storageRef = ref(storage, `posts/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
   }
 
   async function createPost() {
     if (!text && !file) return;
 
-    const imageUrl = await uploadImage(file);
+    const imageUrl = file
+      ? await (async () => {
+          const storageRef = ref(storage, `posts/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          return await getDownloadURL(storageRef);
+        })()
+      : "";
 
     await addDoc(collection(db, "posts"), {
       text,
-      image: imageUrl || "",
+      image: imageUrl,
       userId: user.uid,
       username: savedUsername,
       likes: [],
@@ -213,7 +173,10 @@ function App() {
     setFile(null);
   }
 
+  // ✅ SAFE LIKE
   async function toggleLike(post) {
+    if (!user) return;
+
     const refDoc = doc(db, "posts", post.id);
     const likes = post.likes || [];
 
@@ -234,29 +197,6 @@ function App() {
     }
   }
 
-  async function addComment(postId) {
-    const text = commentInputs[postId];
-    if (!text) return;
-
-    await addDoc(collection(db, "comments"), {
-      postId,
-      text,
-      userId: user.uid,
-      username: savedUsername,
-      createdAt: Date.now()
-    });
-
-    setCommentInputs(prev => ({ ...prev, [postId]: "" }));
-  }
-
-  function getUserData(id) {
-    return users.find(u => u.id === id) || {};
-  }
-
-  function userPosts(userId) {
-    return posts.filter(p => p.userId === userId);
-  }
-
   return (
     <div style={styles.app}>
       <div style={styles.container}>
@@ -265,132 +205,85 @@ function App() {
         {!savedUsername && (
           <>
             <input value={username} onChange={e => setUsername(e.target.value)} />
-            <button onClick={saveUsername}>Save</button>
+            <button onClick={async () => {
+              if (!username) return;
+              await setDoc(doc(db, "users", user.uid), {
+                username,
+                bio: "",
+                avatar: "",
+                followers: [],
+                following: []
+              });
+              setSavedUsername(username);
+            }}>Save</button>
           </>
         )}
 
-        {tab === "home" && !selectedProfile && (
+        {/* FEED */}
+        {tab === "home" && (
           <>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setFeedMode("foryou")}>🔥 For You</button>
-              <button onClick={() => setFeedMode("following")}>👥 Following</button>
-            </div>
-
-            <input value={text} onChange={e => setText(e.target.value)} placeholder="Post..." />
+            <input value={text} onChange={e => setText(e.target.value)} />
             <input type="file" onChange={e => setFile(e.target.files[0])} />
             <button onClick={createPost}>Post</button>
 
-            {(feedMode === "foryou" ? getTrendingPosts() : getFollowingPosts()).map(p => {
-              const profile = getUserData(p.userId);
-
-              return (
-                <div key={p.id} style={styles.card}>
-                  <strong onClick={() => setSelectedProfile({ id: p.userId, username: p.username })}>
-                    @{p.username}
-                  </strong>
-
-                  {profile.avatar && (
-                    <img src={profile.avatar} style={{ width: 40, borderRadius: "50%" }} />
-                  )}
-
-                  <p>{p.text}</p>
-                  {p.image && <img src={p.image} style={styles.image} />}
-
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button onClick={() => toggleLike(p)}>
-                      {(p.likes || []).includes(user.uid) ? "💖" : "🤍"} {(p.likes || []).length}
-                    </button>
-
-                    <button onClick={() => setChatUser({ id: p.userId, username: p.username })}>
-                      💬
-                    </button>
-
-                    <button onClick={() => {
-                      addDoc(collection(db, "reports"), {
-                        postId: p.id,
-                        createdAt: Date.now()
-                      });
-                      alert("Reported");
-                    }}>
-                      🚨
-                    </button>
-                  </div>
-
-                  {/* COMMENTS */}
-                  <div style={{ marginTop: 10 }}>
-                    {comments.filter(c => c.postId === p.id).map(c => (
-                      <div key={c.id}>
-                        <strong>@{c.username}</strong>: {c.text}
-                      </div>
-                    ))}
-
-                    <input
-                      placeholder="Write a comment..."
-                      value={commentInputs[p.id] || ""}
-                      onChange={e =>
-                        setCommentInputs(prev => ({
-                          ...prev,
-                          [p.id]: e.target.value
-                        }))
-                      }
-                    />
-
-                    <button onClick={() => addComment(p.id)}>Post</button>
-                  </div>
-                </div>
-              );
-            })}
-          </>
-        )}
-
-        {/* PROFILE */}
-        {selectedProfile && (
-          <>
-            <button onClick={() => setSelectedProfile(null)}>← Back</button>
-
-            <h2>@{selectedProfile.username}</h2>
-
-            {getUserData(selectedProfile.id).avatar && (
-              <img src={getUserData(selectedProfile.id).avatar} style={{ width: 80, borderRadius: "50%" }} />
-            )}
-
-            <p>{getUserData(selectedProfile.id).bio}</p>
-
-            {selectedProfile.id !== user.uid && (
-              <button onClick={() => toggleFollow(selectedProfile.id)}>
-                {userData?.following?.includes(selectedProfile.id) ? "Unfollow" : "Follow"}
-              </button>
-            )}
-
-            {userPosts(selectedProfile.id).map(p => (
+            {getTrendingPosts().map(p => (
               <div key={p.id} style={styles.card}>
+                <strong>@{p.username}</strong>
                 <p>{p.text}</p>
+
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => toggleLike(p)}>
+                    {(p.likes || []).includes(user?.uid) ? "💖" : "🤍"} {(p.likes || []).length}
+                  </button>
+
+                  <button onClick={() => setChatUser({ id: p.userId, username: p.username })}>
+                    💬
+                  </button>
+
+                  <button onClick={async () => {
+                    await addDoc(collection(db, "reports"), {
+                      postId: p.id,
+                      reportedUser: p.userId,
+                      reportedBy: user.uid,
+                      text: p.text,
+                      createdAt: Date.now()
+                    });
+                    alert("Reported");
+                  }}>
+                    🚨
+                  </button>
+                </div>
               </div>
             ))}
           </>
         )}
-
-        {/* MY PROFILE */}
-        {tab === "profile" && !selectedProfile && (
-          <>
-            <h2>Your Profile</h2>
-
-            {userData?.avatar && (
-              <img src={userData.avatar} style={{ width: 100, borderRadius: "50%" }} />
-            )}
-
-            <input type="file" onChange={e => setAvatarFile(e.target.files[0])} />
-
-            <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Bio..." />
-
-            <button onClick={updateProfile}>Save Profile</button>
-          </>
-        )}
       </div>
+
+      {/* ✅ CHAT UI */}
+      {chatUser && (
+        <div style={styles.chatBox}>
+          <h4>@{chatUser.username}</h4>
+
+          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+            {getChatMessages().map(m => (
+              <div key={m.id}>
+                <b>{m.from === user.uid ? "Me" : chatUser.username}:</b> {m.text}
+              </div>
+            ))}
+          </div>
+
+          <input
+            value={chatText}
+            onChange={e => setChatText(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && sendMessage()}
+          />
+          <button onClick={sendMessage}>Send</button>
+          <button onClick={() => setChatUser(null)}>Close</button>
+        </div>
+      )}
 
       <div style={styles.nav}>
         <button onClick={() => setTab("home")}>🏠</button>
-        <button onClick={() => setTab("profile")}>👤</button>
       </div>
     </div>
   );
@@ -400,7 +293,6 @@ const styles = {
   app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
   container: { maxWidth: 500, margin: "auto", padding: 20 },
   card: { background: "#1e293b", padding: 10, marginTop: 10, borderRadius: 10 },
-  image: { width: "100%", borderRadius: 10 },
   nav: {
     position: "fixed",
     bottom: 0,
@@ -409,6 +301,15 @@ const styles = {
     justifyContent: "space-around",
     background: "#1e293b",
     padding: 10
+  },
+  chatBox: {
+    position: "fixed",
+    bottom: 60,
+    right: 20,
+    width: 300,
+    background: "#1e293b",
+    padding: 10,
+    borderRadius: 10
   }
 };
 
