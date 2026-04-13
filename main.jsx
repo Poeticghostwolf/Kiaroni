@@ -8,7 +8,6 @@ import {
   collection,
   addDoc,
   onSnapshot,
-  query,
   doc,
   setDoc,
   getDoc
@@ -42,6 +41,8 @@ function App() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
 
+  const [notifications, setNotifications] = useState([]);
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,6 +66,11 @@ function App() {
 
       onSnapshot(collection(db, "messages"), snap => {
         setMessages(snap.docs.map(d => d.data()));
+      });
+
+      onSnapshot(collection(db, "notifications"), snap => {
+        const data = snap.docs.map(d => d.data());
+        setNotifications(data.filter(n => n.toUser === res.user.uid));
       });
     }
 
@@ -104,6 +110,13 @@ function App() {
       from: user.uid,
       to: chatUser.id,
       username: savedUsername,
+      createdAt: Date.now()
+    });
+
+    // 🔔 NOTIFICATION
+    await addDoc(collection(db, "notifications"), {
+      text: `${savedUsername} sent you a message`,
+      toUser: chatUser.id,
       createdAt: Date.now()
     });
 
@@ -220,6 +233,23 @@ function App() {
           </>
         )}
 
+        {/* NOTIFICATIONS */}
+        {tab === "notifications" && (
+          <>
+            <h2>Notifications</h2>
+
+            {notifications.length === 0 ? (
+              <div style={styles.card}>No notifications yet</div>
+            ) : (
+              notifications.map((n, i) => (
+                <div key={i} style={styles.card}>
+                  🔔 {n.text}
+                </div>
+              ))
+            )}
+          </>
+        )}
+
         {/* INBOX */}
         {tab === "chat" && !chatUser && (
           <>
@@ -273,6 +303,7 @@ function App() {
         <button onClick={() => setTab("home")}>🏠</button>
         <button onClick={() => setTab("search")}>🔍</button>
         <button onClick={() => setTab("chat")}>💬</button>
+        <button onClick={() => setTab("notifications")}>🔔</button>
       </div>
     </div>
   );
