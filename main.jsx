@@ -24,8 +24,7 @@ import {
 const firebaseConfig = {
   apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
-  projectId: "kiaroni",
-  storageBucket: "kiaroni.appspot.com"
+  projectId: "kiaroni"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -34,16 +33,9 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 
 function App() {
-  const [tab, setTab] = useState("home");
-  const [feedMode, setFeedMode] = useState("foryou");
-
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
   const [savedUsername, setSavedUsername] = useState(null);
-  const [userData, setUserData] = useState(null);
-
-  const [bio, setBio] = useState("");
-  const [avatarFile, setAvatarFile] = useState(null);
 
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
@@ -53,13 +45,7 @@ function App() {
   const [chatUser, setChatUser] = useState(null);
   const [chatText, setChatText] = useState("");
 
-  const [users, setUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
-
-  const [comments, setComments] = useState([]);
-  const [commentInputs, setCommentInputs] = useState({});
-
-  const [selectedProfile, setSelectedProfile] = useState(null);
 
   useEffect(() => {
     async function init() {
@@ -67,20 +53,8 @@ function App() {
       setUser(res.user);
 
       const userRef = doc(db, "users", res.user.uid);
-
       const snap = await getDoc(userRef);
       if (snap.exists()) setSavedUsername(snap.data().username);
-
-      onSnapshot(userRef, s => {
-        if (s.exists()) {
-          setUserData(s.data());
-          setBio(s.data().bio || "");
-        }
-      });
-
-      onSnapshot(collection(db, "users"), snap => {
-        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
 
       onSnapshot(collection(db, "posts"), snap => {
         setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -88,17 +62,7 @@ function App() {
 
       // ✅ FIXED MESSAGES
       onSnapshot(collection(db, "messages"), snap => {
-        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setMessages(msgs);
-      });
-
-      onSnapshot(collection(db, "notifications"), snap => {
-        const data = snap.docs.map(d => d.data());
-        setNotifications(data.filter(n => n.toUser === res.user.uid));
-      });
-
-      onSnapshot(collection(db, "comments"), snap => {
-        setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
     }
 
@@ -138,27 +102,15 @@ function App() {
     });
   }
 
-  function getTrendingPosts() {
-    return [...posts]
-      .map(p => {
-        const likes = (p.likes || []).length;
-        const age = Date.now() - p.createdAt;
-        const recencyBoost = age < 3600000 ? 20 : 0;
-        return { ...p, score: likes * 10 + recencyBoost };
-      })
-      .sort((a, b) => b.score - a.score);
-  }
-
   async function createPost() {
     if (!text && !file) return;
 
-    const imageUrl = file
-      ? await (async () => {
-          const storageRef = ref(storage, `posts/${Date.now()}_${file.name}`);
-          await uploadBytes(storageRef, file);
-          return await getDownloadURL(storageRef);
-        })()
-      : "";
+    let imageUrl = "";
+    if (file) {
+      const storageRef = ref(storage, `posts/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      imageUrl = await getDownloadURL(storageRef);
+    }
 
     await addDoc(collection(db, "posts"), {
       text,
@@ -187,14 +139,6 @@ function App() {
       : [...likes, user.uid];
 
     await updateDoc(refDoc, { likes: updated });
-
-    if (!isLiked && post.userId !== user.uid) {
-      await addDoc(collection(db, "notifications"), {
-        text: `${savedUsername} liked your post`,
-        toUser: post.userId,
-        createdAt: Date.now()
-      });
-    }
   }
 
   return (
@@ -205,58 +149,69 @@ function App() {
         {!savedUsername && (
           <>
             <input value={username} onChange={e => setUsername(e.target.value)} />
-            <button onClick={async () => {
-              if (!username) return;
-              await setDoc(doc(db, "users", user.uid), {
-                username,
-                bio: "",
-                avatar: "",
-                followers: [],
-                following: []
-              });
-              setSavedUsername(username);
-            }}>Save</button>
+            <button
+              onClick={async () => {
+                if (!username) return;
+                await setDoc(doc(db, "users", user.uid), {
+                  username
+                });
+                setSavedUsername(username);
+              }}
+            >
+              Save
+            </button>
           </>
         )}
 
-        {/* FEED */}
-        {tab === "home" && (
-          <>
-            <input value={text} onChange={e => setText(e.target.value)} />
-            <input type="file" onChange={e => setFile(e.target.files[0])} />
-            <button onClick={createPost}>Post</button>
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="Post..."
+        />
+        <input type="file" onChange={e => setFile(e.target.files[0])} />
+        <button onClick={createPost}>Post</button>
 
-            {getTrendingPosts().map(p => (
-              <div key={p.id} style={styles.card}>
-                <strong>@{p.username}</strong>
-                <p>{p.text}</p>
+        {posts.map(p => (
+          <div key={p.id} style={styles.card}>
+            <strong>@{p.username}</strong>
+            <p>{p.text}</p>
 
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => toggleLike(p)}>
-                    {(p.likes || []).includes(user?.uid) ? "💖" : "🤍"} {(p.likes || []).length}
-                  </button>
+            {p.image && <img src={p.image} style={styles.image} />}
 
-                  <button onClick={() => setChatUser({ id: p.userId, username: p.username })}>
-                    💬
-                  </button>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => toggleLike(p)}
+                style={styles.likeBtn}
+              >
+                {(p.likes || []).includes(user?.uid) ? "❤️" : "🤍"}{" "}
+                {(p.likes || []).length}
+              </button>
 
-                  <button onClick={async () => {
-                    await addDoc(collection(db, "reports"), {
-                      postId: p.id,
-                      reportedUser: p.userId,
-                      reportedBy: user.uid,
-                      text: p.text,
-                      createdAt: Date.now()
-                    });
-                    alert("Reported");
-                  }}>
-                    🚨
-                  </button>
-                </div>
-              </div>
-            ))}
-          </>
-        )}
+              <button onClick={() => setChatUser({ id: p.userId, username: p.username })}>
+                💬
+              </button>
+
+              <button
+                onClick={async () => {
+                  await addDoc(collection(db, "reports"), {
+                    postId: p.id,
+                    reportedUser: p.userId,
+                    reportedBy: user.uid,
+                    text: p.text,
+                    createdAt: Date.now()
+                  });
+
+                  setNotifications(prev => [
+                    ...prev,
+                    { text: "Report submitted", local: true }
+                  ]);
+                }}
+              >
+                🚨
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* ✅ CHAT UI */}
@@ -264,10 +219,26 @@ function App() {
         <div style={styles.chatBox}>
           <h4>@{chatUser.username}</h4>
 
-          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", marginBottom: 10 }}>
             {getChatMessages().map(m => (
-              <div key={m.id}>
-                <b>{m.from === user.uid ? "Me" : chatUser.username}:</b> {m.text}
+              <div
+                key={m.id}
+                style={{
+                  textAlign: m.from === user.uid ? "right" : "left",
+                  marginBottom: 6
+                }}
+              >
+                <span
+                  style={{
+                    background:
+                      m.from === user.uid ? "#6366f1" : "#334155",
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    display: "inline-block"
+                  }}
+                >
+                  {m.text}
+                </span>
               </div>
             ))}
           </div>
@@ -281,35 +252,51 @@ function App() {
           <button onClick={() => setChatUser(null)}>Close</button>
         </div>
       )}
-
-      <div style={styles.nav}>
-        <button onClick={() => setTab("home")}>🏠</button>
-      </div>
     </div>
   );
 }
 
 const styles = {
   app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
-  container: { maxWidth: 500, margin: "auto", padding: 20 },
-  card: { background: "#1e293b", padding: 10, marginTop: 10, borderRadius: 10 },
-  nav: {
-    position: "fixed",
-    bottom: 0,
-    width: "100%",
-    display: "flex",
-    justifyContent: "space-around",
-    background: "#1e293b",
-    padding: 10
+
+  container: {
+    maxWidth: 800,
+    margin: "auto",
+    padding: 20
   },
-  chatBox: {
-    position: "fixed",
-    bottom: 60,
-    right: 20,
-    width: 300,
+
+  card: {
     background: "#1e293b",
     padding: 10,
+    marginTop: 10,
     borderRadius: 10
+  },
+
+  image: {
+    width: "100%",
+    borderRadius: 10
+  },
+
+  likeBtn: {
+    background: "none",
+    border: "none",
+    fontSize: 16,
+    cursor: "pointer"
+  },
+
+  chatBox: {
+    position: "fixed",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    width: 350,
+    height: 400,
+    background: "#1e293b",
+    padding: 15,
+    borderRadius: 15,
+    zIndex: 999,
+    display: "flex",
+    flexDirection: "column"
   }
 };
 
