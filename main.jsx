@@ -168,7 +168,7 @@ function App() {
       .sort((a, b) => b.score - a.score);
   }
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
 
   return (
     <div style={styles.app}>
@@ -180,6 +180,7 @@ function App() {
             <input
               value={username}
               onChange={e => setUsername(e.target.value)}
+              placeholder="Choose username"
             />
             <button onClick={saveUsername}>Save</button>
           </>
@@ -203,6 +204,7 @@ function App() {
             {filteredPosts().map(p => (
               <div key={p.id} style={styles.card}>
                 <strong
+                  style={{ cursor: "pointer" }}
                   onClick={() => {
                     setChatUser({
                       userId: p.userId,
@@ -217,7 +219,9 @@ function App() {
                 <p>{p.text}</p>
                 {p.image && <img src={p.image} style={styles.image} />}
 
-                <button>❤️ {(p.likes || []).length}</button>
+                <button>
+                  ❤️ {(p.likes || []).length}
+                </button>
               </div>
             ))}
           </>
@@ -228,15 +232,24 @@ function App() {
           <>
             <h2>Messages</h2>
 
-            {getConversations().map(c => (
-              <div
-                key={c.userId}
-                style={styles.card}
-                onClick={() => setChatUser(c)}
-              >
-                💬 @{c.username}
+            {getConversations().length === 0 ? (
+              <div style={styles.card}>
+                <p>No messages yet</p>
+                <p style={{ opacity: 0.7 }}>
+                  Go to Home and tap a username to start chatting 👆
+                </p>
               </div>
-            ))}
+            ) : (
+              getConversations().map(c => (
+                <div
+                  key={c.userId}
+                  style={styles.card}
+                  onClick={() => setChatUser(c)}
+                >
+                  💬 @{c.username}
+                </div>
+              ))
+            )}
           </>
         )}
 
@@ -272,8 +285,16 @@ function App() {
 }
 
 const styles = {
-  app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
-  container: { maxWidth: 500, margin: "auto", padding: 20 },
+  app: {
+    background: "#0f172a",
+    minHeight: "100vh",
+    color: "#fff"
+  },
+  container: {
+    maxWidth: 500,
+    margin: "auto",
+    padding: 20
+  },
   card: {
     background: "#1e293b",
     padding: 10,
@@ -281,7 +302,10 @@ const styles = {
     borderRadius: 10,
     cursor: "pointer"
   },
-  image: { width: "100%", borderRadius: 10 },
+  image: {
+    width: "100%",
+    borderRadius: 10
+  },
   nav: {
     position: "fixed",
     bottom: 0,
