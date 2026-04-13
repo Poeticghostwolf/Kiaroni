@@ -26,6 +26,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 function App() {
+  const [tab, setTab] = useState("home");
+
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
   const [savedUsername, setSavedUsername] = useState(null);
@@ -34,7 +36,6 @@ function App() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [viewProfile, setViewProfile] = useState(null);
   const [animatingLike, setAnimatingLike] = useState(null);
 
   const [notifications, setNotifications] = useState([]);
@@ -84,7 +85,7 @@ function App() {
         setLoading(false);
       });
 
-      // 🔔 NOTIFICATIONS
+      // NOTIFICATIONS
       const notifQuery = query(collection(db, "notifications"));
       onSnapshot(notifQuery, (snapshot) => {
         const data = snapshot.docs.map(d => d.data());
@@ -94,7 +95,7 @@ function App() {
         setUnreadCount(mine.length);
       });
 
-      // 💬 COMMENTS
+      // COMMENTS
       const commentQuery = query(collection(db, "comments"));
       onSnapshot(commentQuery, (snapshot) => {
         const data = snapshot.docs.map(d => ({
@@ -150,45 +151,6 @@ function App() {
     await updateDoc(ref, { likes: updatedLikes });
   }
 
-  async function reportPost(post) {
-    await updateTrust(post.userId, -5);
-
-    await addDoc(collection(db, "reports"), {
-      postId: post.id,
-      reportedUser: post.userId,
-      createdAt: Date.now()
-    });
-
-    alert("🚨 Report submitted");
-  }
-
-  async function saveUsername() {
-    if (!username) return;
-
-    await setDoc(doc(db, "users", user.uid), {
-      username,
-      trustScore: 50
-    });
-
-    setSavedUsername(username);
-  }
-
-  async function createPost() {
-    if (!text) return;
-
-    await addDoc(collection(db, "posts"), {
-      text,
-      userId: user.uid,
-      username: savedUsername,
-      likes: [],
-      trustScore: 50,
-      createdAt: Date.now()
-    });
-
-    await updateTrust(user.uid, 1);
-    setText("");
-  }
-
   async function addComment(postId, postUserId) {
     const text = commentText[postId];
     if (!text) return;
@@ -213,257 +175,133 @@ function App() {
     setCommentText(prev => ({ ...prev, [postId]: "" }));
   }
 
-  function profilePosts() {
-    return posts.filter(p => p.userId === viewProfile.userId);
+  async function createPost() {
+    if (!text) return;
+
+    await addDoc(collection(db, "posts"), {
+      text,
+      userId: user.uid,
+      username: savedUsername,
+      likes: [],
+      trustScore: 50,
+      createdAt: Date.now()
+    });
+
+    await updateTrust(user.uid, 1);
+    setText("");
+  }
+
+  function myPosts() {
+    return posts.filter(p => p.userId === user.uid);
   }
 
   if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
-
-  if (viewProfile) {
-    return (
-      <div style={styles.page}>
-        <button style={styles.backBtn} onClick={() => setViewProfile(null)}>
-          ← Back
-        </button>
-
-        <h2>@{viewProfile.username}</h2>
-
-        {profilePosts().map(p => (
-          <div key={p.id} style={styles.card}>
-            <p>{p.text}</p>
-          </div>
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>Kiaroni 🔥</h1>
 
-      {/* 🔔 BELL */}
-      <div style={styles.bellContainer}>
-        🔔
-        {unreadCount > 0 && (
-          <span style={styles.badge}>{unreadCount}</span>
-        )}
-      </div>
+      {/* HOME */}
+      {tab === "home" && (
+        <>
+          <div style={styles.card}>
+            <input
+              style={styles.input}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="What's happening?"
+            />
+            <button style={styles.primaryBtn} onClick={createPost}>
+              Post
+            </button>
+          </div>
 
-      {/* 🔔 NOTIFICATIONS */}
-      {notifications.length > 0 && (
-        <div style={styles.card} onClick={() => setUnreadCount(0)}>
-          <h3>🔔 Notifications</h3>
-          {notifications.slice(0, 3).map((n, i) => (
-            <p key={i} style={{ fontSize: 14 }}>
+          {posts.map(p => (
+            <div key={p.id} style={styles.card}>
+              <strong>@{p.username}</strong>
+              <p>{p.text}</p>
+
+              <button onClick={() => toggleLike(p)}>
+                ❤️ {(p.likes || []).length}
+              </button>
+
+              <div>
+                <input
+                  value={commentText[p.id] || ""}
+                  onChange={(e) =>
+                    setCommentText({
+                      ...commentText,
+                      [p.id]: e.target.value
+                    })
+                  }
+                />
+                <button onClick={() => addComment(p.id, p.userId)}>
+                  Reply
+                </button>
+
+                {comments
+                  .filter(c => c.postId === p.id)
+                  .map(c => (
+                    <p key={c.id}>
+                      @{c.username}: {c.text}
+                    </p>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* NOTIFICATIONS */}
+      {tab === "notifications" && (
+        <div style={styles.card}>
+          <h2>🔔 Notifications</h2>
+          {notifications.map((n, i) => (
+            <p key={i}>
               {n.type === "like" && `❤️ ${n.fromUser} liked your post`}
-              {n.type === "comment" && `💬 ${n.fromUser} replied: ${n.text}`}
+              {n.type === "comment" && `💬 ${n.fromUser}: ${n.text}`}
             </p>
           ))}
         </div>
       )}
 
-      {!savedUsername ? (
+      {/* PROFILE */}
+      {tab === "profile" && (
         <div style={styles.card}>
-          <input
-            style={styles.input}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Choose username"
-          />
-          <button style={styles.primaryBtn} onClick={saveUsername}>
-            Save
-          </button>
+          <h2>@{savedUsername}</h2>
+          {myPosts().map(p => (
+            <p key={p.id}>{p.text}</p>
+          ))}
         </div>
-      ) : (
-        <p style={styles.usernameDisplay}>@{savedUsername}</p>
       )}
 
-      <div style={styles.card}>
-        <input
-          style={styles.input}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="What's happening?"
-        />
-        <button style={styles.primaryBtn} onClick={createPost}>
-          Post
+      {/* BOTTOM NAV */}
+      <div style={styles.nav}>
+        <button onClick={() => setTab("home")}>🏠</button>
+        <button onClick={() => setTab("notifications")}>
+          🔔 {unreadCount > 0 && `(${unreadCount})`}
         </button>
+        <button onClick={() => setTab("profile")}>👤</button>
       </div>
-
-      {posts.map(p => {
-        const liked = (p.likes || []).includes(user.uid);
-        const isAnimating = animatingLike === p.id;
-
-        const trust = p.trustScore || 50;
-        const likes = (p.likes || []).length;
-        const trendingScore = trust + likes * 3;
-        const isTrending = trendingScore > 80;
-
-        return (
-          <div
-            key={p.id}
-            style={{
-              ...styles.cardAnimated,
-              border: isTrending ? "2px solid orange" : "none",
-              boxShadow: isTrending ? "0 0 10px orange" : "none"
-            }}
-          >
-            {trust < 40 ? (
-              <div style={styles.warning}>⚠️ Hidden due to low trust</div>
-            ) : (
-              <>
-                <div style={styles.header}>
-                  <span
-                    style={styles.username}
-                    onClick={() =>
-                      setViewProfile({ userId: p.userId, username: p.username })
-                    }
-                  >
-                    @{p.username} ⭐ {trust}
-                    {trust >= 80 && " 👑"}
-                    {isTrending && " 🔥"}
-                  </span>
-                </div>
-
-                <p style={styles.text}>{p.text}</p>
-
-                <div style={styles.actions}>
-                  <button
-                    style={{
-                      ...styles.likeBtn,
-                      transform: isAnimating ? "scale(1.3)" : "scale(1)"
-                    }}
-                    onClick={() => toggleLike(p)}
-                  >
-                    {liked ? "💔" : "❤️"} {likes}
-                  </button>
-
-                  <button
-                    style={styles.reportBtn}
-                    onClick={() => reportPost(p)}
-                  >
-                    🚨
-                  </button>
-                </div>
-
-                {/* 💬 COMMENTS */}
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    style={styles.input}
-                    placeholder="Reply..."
-                    value={commentText[p.id] || ""}
-                    onChange={(e) =>
-                      setCommentText({
-                        ...commentText,
-                        [p.id]: e.target.value
-                      })
-                    }
-                  />
-                  <button
-                    style={styles.primaryBtn}
-                    onClick={() => addComment(p.id, p.userId)}
-                  >
-                    Reply
-                  </button>
-
-                  {comments
-                    .filter(c => c.postId === p.id)
-                    .slice(0, 3)
-                    .map(c => (
-                      <p key={c.id} style={{ fontSize: 14 }}>
-                        <strong>@{c.username}</strong>: {c.text}
-                      </p>
-                    ))}
-                </div>
-              </>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
 
 const styles = {
-  page: {
-    background: "#0f172a",
-    minHeight: "100vh",
-    color: "#fff",
-    padding: 20,
-    maxWidth: 600,
-    margin: "0 auto",
-    fontFamily: "system-ui"
-  },
-  title: { textAlign: "center", marginBottom: 20 },
-  usernameDisplay: { textAlign: "center", marginBottom: 20 },
-  card: {
+  page: { padding: 20, color: "#fff", background: "#0f172a", minHeight: "100vh" },
+  title: { textAlign: "center" },
+  card: { background: "#1e293b", padding: 15, marginTop: 10, borderRadius: 10 },
+  input: { width: "100%", marginBottom: 10 },
+  primaryBtn: { width: "100%" },
+  nav: {
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    display: "flex",
+    justifyContent: "space-around",
     background: "#1e293b",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 15
-  },
-  cardAnimated: {
-    background: "#1e293b",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 15,
-    animation: "fadeIn 0.4s ease"
-  },
-  input: {
-    width: "100%",
-    padding: 10,
-    borderRadius: 8,
-    border: "none",
-    marginBottom: 10
-  },
-  primaryBtn: {
-    width: "100%",
-    padding: 10,
-    borderRadius: 8,
-    border: "none",
-    background: "#3b82f6",
-    color: "#fff",
-    cursor: "pointer"
-  },
-  header: { marginBottom: 8 },
-  username: { fontWeight: "bold", cursor: "pointer" },
-  text: { marginBottom: 10 },
-  actions: { display: "flex", justifyContent: "space-between" },
-  likeBtn: {
-    background: "#334155",
-    border: "none",
-    padding: "6px 10px",
-    borderRadius: 8,
-    cursor: "pointer",
-    transition: "all 0.15s ease"
-  },
-  reportBtn: {
-    background: "#7f1d1d",
-    border: "none",
-    padding: "6px 10px",
-    borderRadius: 8,
-    cursor: "pointer"
-  },
-  warning: {
-    background: "#3f1d1d",
-    padding: 10,
-    borderRadius: 8
-  },
-  backBtn: { marginBottom: 10 },
-  bellContainer: {
-    position: "relative",
-    fontSize: 24,
-    marginBottom: 10
-  },
-  badge: {
-    position: "absolute",
-    top: -5,
-    right: -10,
-    background: "red",
-    color: "white",
-    borderRadius: "50%",
-    padding: "2px 6px",
-    fontSize: 12
+    padding: 10
   }
 };
 
