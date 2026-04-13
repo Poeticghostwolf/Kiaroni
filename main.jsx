@@ -24,7 +24,7 @@ import {
 const firebaseConfig = {
   apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
-  projectId: "kiaroni", // ✅ comma added here
+  projectId: "kiaroni",
   storageBucket: "kiaroni.appspot.com"
 };
 
@@ -67,7 +67,6 @@ function App() {
         setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
-      // 🔔 Notifications
       onSnapshot(collection(db, "notifications"), snap => {
         const data = snap.docs.map(d => d.data());
         setNotifications(data.filter(n => n.toUser === res.user.uid));
@@ -77,8 +76,9 @@ function App() {
     init();
   }, []);
 
-  // 💬 FILTER CHAT
   function getChatMessages(userId) {
+    if (!user) return [];
+
     return messages
       .filter(
         m =>
@@ -88,8 +88,8 @@ function App() {
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
-  // 💬 GET CONVERSATIONS (INBOX)
   function getConversations() {
+    if (!user) return [];
     const map = {};
 
     messages.forEach(m => {
@@ -100,7 +100,6 @@ function App() {
     return Object.keys(map);
   }
 
-  // 💬 SEND MESSAGE
   async function sendMessage() {
     if (!chatText.trim() || !chatUser) return;
 
@@ -112,15 +111,8 @@ function App() {
     });
 
     setChatText("");
-
-    await addDoc(collection(db, "notifications"), {
-      text: `${savedUsername} sent you a message`,
-      toUser: chatUser.id,
-      createdAt: Date.now()
-    });
   }
 
-  // 📝 CREATE POST
   async function createPost() {
     if (!text && !file) return;
 
@@ -144,7 +136,6 @@ function App() {
     setFile(null);
   }
 
-  // ❤️ LIKE
   async function toggleLike(post) {
     if (!user) return;
 
@@ -183,45 +174,80 @@ function App() {
         {/* HOME */}
         {tab === "home" && (
           <>
-            <input value={text} onChange={e => setText(e.target.value)} placeholder="Post..." />
-            <input type="file" onChange={e => setFile(e.target.files[0])} />
-            <button onClick={createPost}>Post</button>
+            <div style={styles.postBox}>
+              <textarea
+                value={text}
+                onChange={e => setText(e.target.value)}
+                placeholder="What's on your mind?"
+                style={styles.textarea}
+              />
+
+              <div style={styles.postActions}>
+                <input type="file" onChange={e => setFile(e.target.files[0])} />
+                <button onClick={createPost} style={styles.postBtn}>
+                  Post
+                </button>
+              </div>
+            </div>
 
             {posts.map(p => (
               <div key={p.id} style={styles.card}>
                 <strong>@{p.username}</strong>
                 <p>{p.text}</p>
 
+                {p.image && <img src={p.image} style={styles.image} />}
+
                 <div style={styles.actions}>
-                  <button onClick={() => toggleLike(p)}>❤️ {(p.likes || []).length}</button>
-                  <button onClick={() => setChatUser({ id: p.userId, username: p.username })}>💬</button>
-                  <button onClick={() => addDoc(collection(db, "reports"), {
-                    postId: p.id,
-                    reportedUser: p.userId,
-                    reportedBy: user.uid,
-                    createdAt: Date.now()
-                  })}>🚨</button>
+                  <button onClick={() => toggleLike(p)} style={styles.actionBtn}>
+                    {(p.likes || []).includes(user?.uid) ? "❤️" : "🤍"} {(p.likes || []).length}
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      setChatUser({ id: p.userId, username: p.username })
+                    }
+                    style={styles.actionBtn}
+                  >
+                    💬
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      addDoc(collection(db, "reports"), {
+                        postId: p.id,
+                        reportedUser: p.userId,
+                        reportedBy: user.uid,
+                        createdAt: Date.now()
+                      })
+                    }
+                    style={styles.actionBtn}
+                  >
+                    🚨
+                  </button>
                 </div>
               </div>
             ))}
           </>
         )}
 
-        {/* 💬 INBOX TAB */}
+        {/* INBOX */}
         {tab === "inbox" && (
           <>
             <h2>Messages</h2>
             {getConversations().map(id => (
               <div key={id} style={styles.card}>
-                <button onClick={() => setChatUser({ id })}>
-                  Open chat with {id}
+                <button
+                  onClick={() => setChatUser({ id, username: id })}
+                  style={styles.actionBtn}
+                >
+                  Chat with {id}
                 </button>
               </div>
             ))}
           </>
         )}
 
-        {/* 🔔 NOTIFICATIONS */}
+        {/* NOTIFICATIONS */}
         {tab === "notifications" && (
           <>
             <h2>Notifications</h2>
@@ -233,7 +259,7 @@ function App() {
           </>
         )}
 
-        {/* 👤 PROFILE */}
+        {/* PROFILE */}
         {tab === "profile" && (
           <>
             <h2>Your Profile</h2>
@@ -245,17 +271,38 @@ function App() {
       {/* CHAT MODAL */}
       {chatUser && (
         <div style={styles.chatBox}>
-          <h4>{chatUser.username || chatUser.id}</h4>
+          <h4>@{chatUser.username}</h4>
 
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", paddingRight: 5 }}>
             {getChatMessages(chatUser.id).map(m => (
-              <div key={m.id}>
-                <b>{m.from === user.uid ? "Me" : "Them"}:</b> {m.text}
+              <div
+                key={m.id}
+                style={{
+                  textAlign: m.from === user.uid ? "right" : "left",
+                  marginBottom: 6
+                }}
+              >
+                <span
+                  style={{
+                    background:
+                      m.from === user.uid ? "#6366f1" : "#334155",
+                    padding: "8px 12px",
+                    borderRadius: 12,
+                    display: "inline-block",
+                    maxWidth: "70%"
+                  }}
+                >
+                  {m.text}
+                </span>
               </div>
             ))}
           </div>
 
-          <input value={chatText} onChange={e => setChatText(e.target.value)} />
+          <input
+            value={chatText}
+            onChange={e => setChatText(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && sendMessage()}
+          />
           <button onClick={sendMessage}>Send</button>
           <button onClick={() => setChatUser(null)}>Close</button>
         </div>
@@ -263,32 +310,110 @@ function App() {
 
       {/* NAV */}
       <div style={styles.nav}>
-        <button onClick={() => setTab("home")}>🏠</button>
-        <button onClick={() => setTab("inbox")}>💬</button>
-        <button onClick={() => setTab("notifications")}>🔔</button>
-        <button onClick={() => setTab("profile")}>👤</button>
+        {[
+          { id: "home", icon: "🏠" },
+          { id: "inbox", icon: "💬" },
+          { id: "notifications", icon: "🔔" },
+          { id: "profile", icon: "👤" }
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              ...styles.navBtn,
+              color: tab === t.id ? "#6366f1" : "#fff"
+            }}
+          >
+            {t.icon}
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
 const styles = {
-  app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
-  container: { maxWidth: 800, margin: "auto", padding: 20 },
-  card: { background: "#1e293b", padding: 10, marginTop: 10, borderRadius: 10 },
-  actions: { display: "flex", gap: 10 },
+  app: {
+    background: "linear-gradient(to bottom, #0f172a, #1e3a8a)",
+    minHeight: "100vh",
+    color: "#fff"
+  },
+
+  container: {
+    maxWidth: 800,
+    margin: "auto",
+    padding: 20
+  },
+
+  postBox: {
+    background: "#1e293b",
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 15
+  },
+
+  textarea: {
+    width: "100%",
+    minHeight: 60,
+    background: "transparent",
+    border: "none",
+    color: "#fff",
+    outline: "none"
+  },
+
+  postActions: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginTop: 10
+  },
+
+  postBtn: {
+    background: "#6366f1",
+    border: "none",
+    padding: "6px 12px",
+    borderRadius: 6,
+    color: "#fff"
+  },
+
+  card: {
+    background: "rgba(30,41,59,0.9)",
+    padding: 15,
+    marginTop: 15,
+    borderRadius: 15
+  },
+
+  image: {
+    width: "100%",
+    borderRadius: 10
+  },
+
+  actions: {
+    display: "flex",
+    gap: 15,
+    marginTop: 10
+  },
+
+  actionBtn: {
+    background: "none",
+    border: "none",
+    color: "#fff",
+    cursor: "pointer"
+  },
+
   chatBox: {
     position: "fixed",
     top: "50%",
     left: "50%",
     transform: "translate(-50%, -50%)",
-    width: 300,
+    width: 350,
     height: 400,
     background: "#1e293b",
-    padding: 10,
+    padding: 15,
+    borderRadius: 15,
     display: "flex",
     flexDirection: "column"
   },
+
   nav: {
     position: "fixed",
     bottom: 0,
@@ -297,6 +422,13 @@ const styles = {
     justifyContent: "space-around",
     background: "#1e293b",
     padding: 10
+  },
+
+  navBtn: {
+    background: "none",
+    border: "none",
+    fontSize: 20,
+    cursor: "pointer"
   }
 };
 
