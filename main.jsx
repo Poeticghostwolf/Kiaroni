@@ -43,17 +43,21 @@ function App() {
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
 
   const [messages, setMessages] = useState([]);
   const [chatUser, setChatUser] = useState(null);
   const [chatText, setChatText] = useState("");
 
   const [notifications, setNotifications] = useState([]);
+  const [popup, setPopup] = useState(null);
 
-  // NEW
   const [users, setUsers] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [userData, setUserData] = useState(null);
+
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [reports, setReports] = useState([]);
 
   useEffect(() => {
     async function init() {
@@ -82,16 +86,38 @@ function App() {
 
       onSnapshot(collection(db, "notifications"), snap => {
         const data = snap.docs.map(d => d.data());
-        setNotifications(data.filter(n => n.toUser === res.user.uid));
+        const mine = data.filter(n => n.toUser === res.user.uid);
+        setNotifications(mine);
+
+        if (mine.length) {
+          const latest = mine[mine.length - 1];
+          setPopup(latest.text);
+          setTimeout(() => setPopup(null), 3000);
+        }
+      });
+
+      onSnapshot(collection(db, "reports"), snap => {
+        setReports(snap.docs.map(d => d.data()));
       });
     }
 
     init();
   }, []);
 
+  function getSmartFeed() {
+    return [...posts]
+      .map(p => {
+        const likes = (p.likes || []).length;
+        const age = Date.now() - p.createdAt;
+        const recencyBoost = age < 3600000 ? 20 : 0;
+        const score = likes * 10 + recencyBoost + Math.random() * 5;
+        return { ...p, score };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
   function getChatMessages(userId) {
     if (!user) return [];
-
     return messages
       .filter(
         m =>
@@ -104,12 +130,10 @@ function App() {
   function getConversations() {
     if (!user) return [];
     const map = {};
-
     messages.forEach(m => {
       if (m.from === user.uid) map[m.to] = true;
       if (m.to === user.uid) map[m.from] = true;
     });
-
     return Object.keys(map);
   }
 
@@ -132,6 +156,12 @@ function App() {
     });
 
     setChatText("");
+
+    await addDoc(collection(db, "notifications"), {
+      text: `${savedUsername} messaged you`,
+      toUser: chatUser.id,
+      createdAt: Date.now()
+    });
   }
 
   async function createPost() {
@@ -155,20 +185,15 @@ function App() {
 
     setText("");
     setFile(null);
+    setPreview(null);
   }
 
   async function toggleLike(post) {
-    if (!user) return;
-
     const refDoc = doc(db, "posts", post.id);
     const likes = post.likes || [];
-
-    const isLiked = likes.includes(user.uid);
-
-    const updated = isLiked
+    const updated = likes.includes(user.uid)
       ? likes.filter(id => id !== user.uid)
       : [...likes, user.uid];
-
     await updateDoc(refDoc, { likes: updated });
   }
 
@@ -182,9 +207,7 @@ function App() {
     const following = mySnap.data()?.following || [];
     const followers = theirSnap.data()?.followers || [];
 
-    const isFollowing = following.includes(targetId);
-
-    if (isFollowing) {
+    if (following.includes(targetId)) {
       await updateDoc(myRef, {
         following: following.filter(id => id !== targetId)
       });
@@ -201,6 +224,22 @@ function App() {
     }
   }
 
+  async function uploadAvatar(file) {
+    if (!file) return null;
+    const storageRef = ref(storage, `avatars/${user.uid}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  }
+
+  async function updateProfile() {
+    let avatarUrl = userData?.avatar || "";
+    if (avatarFile) avatarUrl = await uploadAvatar(avatarFile);
+
+    await updateDoc(doc(db, "users", user.uid), {
+      avatar: avatarUrl
+    });
+  }
+
   return (
     <div style={styles.app}>
       <div style={styles.container}>
@@ -211,7 +250,6 @@ function App() {
             <input value={username} onChange={e => setUsername(e.target.value)} />
             <button
               onClick={async () => {
-                if (!username) return;
                 await setDoc(doc(db, "users", user.uid), {
                   username,
                   followers: [],
@@ -225,16 +263,16 @@ function App() {
           </>
         )}
 
+        {popup && <div style={styles.popup}>{popup}</div>}
+
         {/* PROFILE VIEW */}
         {selectedProfile && (
           <>
             <button onClick={() => setSelectedProfile(null)}>← Back</button>
-
             <h2>@{selectedProfile.username}</h2>
 
             <p>
-              Followers: {(getUser(selectedProfile.id).followers || []).length} |
-              Following: {(getUser(selectedProfile.id).following || []).length}
+              Followers: {(getUser(selectedProfile.id).followers || []).length}
             </p>
 
             {selectedProfile.id !== user?.uid && (
@@ -247,7 +285,7 @@ function App() {
 
             {getUserPosts(selectedProfile.id).map(p => (
               <div key={p.id} style={styles.card}>
-                <p>{p.text}</p>
+                {p.text}
               </div>
             ))}
           </>
@@ -261,21 +299,25 @@ function App() {
                 value={text}
                 onChange={e => setText(e.target.value)}
                 placeholder="What's on your mind?"
-                style={styles.textarea}
               />
 
-              <div style={styles.postActions}>
-                <input type="file" onChange={e => setFile(e.target.files[0])} />
-                <button onClick={createPost} style={styles.postBtn}>
-                  Post
-                </button>
-              </div>
+              <input
+                type="file"
+                onChange={e => {
+                  const f = e.target.files[0];
+                  setFile(f);
+                  if (f) setPreview(URL.createObjectURL(f));
+                }}
+              />
+
+              {preview && <img src={preview} style={styles.image} />}
+
+              <button onClick={createPost}>Post</button>
             </div>
 
-            {posts.map(p => (
+            {getSmartFeed().map(p => (
               <div key={p.id} style={styles.card}>
                 <strong
-                  style={{ cursor: "pointer" }}
                   onClick={() =>
                     setSelectedProfile({
                       id: p.userId,
@@ -287,8 +329,6 @@ function App() {
                 </strong>
 
                 <p>{p.text}</p>
-
-                {p.image && <img src={p.image} style={styles.image} />}
 
                 <div style={styles.actions}>
                   <button onClick={() => toggleLike(p)}>
@@ -351,12 +391,30 @@ function App() {
         {!selectedProfile && tab === "profile" && (
           <>
             <h2>Your Profile</h2>
-            <p>@{savedUsername}</p>
+
+            <input type="file" onChange={e => setAvatarFile(e.target.files[0])} />
+            <button onClick={updateProfile}>Save Avatar</button>
+
+            {userData?.avatar && (
+              <img src={userData.avatar} style={styles.avatar} />
+            )}
+          </>
+        )}
+
+        {/* ADMIN */}
+        {!selectedProfile && tab === "admin" && (
+          <>
+            <h2>Admin Panel</h2>
+            {reports.map((r, i) => (
+              <div key={i} style={styles.card}>
+                <p>{r.postId}</p>
+                <p>{r.reportedUser}</p>
+              </div>
+            ))}
           </>
         )}
       </div>
 
-      {/* CHAT */}
       {chatUser && (
         <div style={styles.chatBox}>
           <h4>@{chatUser.username}</h4>
@@ -364,8 +422,7 @@ function App() {
           <div style={{ flex: 1, overflowY: "auto" }}>
             {getChatMessages(chatUser.id).map(m => (
               <div key={m.id}>
-                {m.from === user.uid ? "Me: " : "Them: "}
-                {m.text}
+                {m.from === user.uid ? "Me: " : "Them: "} {m.text}
               </div>
             ))}
           </div>
@@ -376,9 +433,8 @@ function App() {
         </div>
       )}
 
-      {/* NAV */}
       <div style={styles.nav}>
-        {["home", "inbox", "notifications", "profile"].map(t => (
+        {["home", "inbox", "notifications", "profile", "admin"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -393,7 +449,9 @@ function App() {
               ? "💬"
               : t === "notifications"
               ? "🔔"
-              : "👤"}
+              : t === "profile"
+              ? "👤"
+              : "🛡"}
           </button>
         ))}
       </div>
@@ -405,11 +463,9 @@ const styles = {
   app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
   container: { maxWidth: 800, margin: "auto", padding: 20 },
   postBox: { background: "#1e293b", padding: 10, borderRadius: 10 },
-  textarea: { width: "100%", background: "transparent", color: "#fff" },
-  postActions: { display: "flex", justifyContent: "space-between" },
-  postBtn: { background: "#6366f1", border: "none", color: "#fff" },
-  card: { background: "#1e293b", padding: 10, marginTop: 10, borderRadius: 10 },
+  card: { background: "#1e293b", padding: 10, marginTop: 10 },
   image: { width: "100%" },
+  avatar: { width: 80, borderRadius: "50%" },
   actions: { display: "flex", gap: 10 },
   chatBox: {
     position: "fixed",
@@ -431,7 +487,16 @@ const styles = {
     justifyContent: "space-around",
     background: "#1e293b"
   },
-  navBtn: { background: "none", border: "none", fontSize: 20 }
+  navBtn: { background: "none", border: "none", fontSize: 20 },
+  popup: {
+    position: "fixed",
+    bottom: 70,
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#6366f1",
+    padding: "10px 20px",
+    borderRadius: 10
+  }
 };
 
 createRoot(document.getElementById("root")).render(<App />);
