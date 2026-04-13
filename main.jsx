@@ -39,7 +39,6 @@ function App() {
 
   const [notifications, setNotifications] = useState([]);
 
-  // 💬 COMMENTS
   const [commentText, setCommentText] = useState({});
   const [comments, setComments] = useState([]);
 
@@ -137,7 +136,6 @@ function App() {
           type: "like",
           toUser: post.userId,
           fromUser: savedUsername,
-          postText: post.text,
           createdAt: Date.now()
         });
       }
@@ -188,8 +186,8 @@ function App() {
     setText("");
   }
 
-  // 💬 ADD COMMENT
-  async function addComment(postId) {
+  // 💬 ADD COMMENT + NOTIFICATION
+  async function addComment(postId, postUserId) {
     const text = commentText[postId];
     if (!text) return;
 
@@ -199,6 +197,16 @@ function App() {
       username: savedUsername,
       createdAt: Date.now()
     });
+
+    if (postUserId !== user.uid) {
+      await addDoc(collection(db, "notifications"), {
+        type: "comment",
+        toUser: postUserId,
+        fromUser: savedUsername,
+        text,
+        createdAt: Date.now()
+      });
+    }
 
     setCommentText(prev => ({ ...prev, [postId]: "" }));
   }
@@ -237,7 +245,8 @@ function App() {
           <h3>🔔 Notifications</h3>
           {notifications.slice(0, 3).map((n, i) => (
             <p key={i} style={{ fontSize: 14 }}>
-              ❤️ {n.fromUser} liked your post
+              {n.type === "like" && `❤️ ${n.fromUser} liked your post`}
+              {n.type === "comment" && `💬 ${n.fromUser} replied: ${n.text}`}
             </p>
           ))}
         </div>
@@ -327,7 +336,7 @@ function App() {
                   </button>
                 </div>
 
-                {/* 💬 COMMENTS UI */}
+                {/* 💬 COMMENTS */}
                 <div style={{ marginTop: 10 }}>
                   <input
                     style={styles.input}
@@ -342,7 +351,7 @@ function App() {
                   />
                   <button
                     style={styles.primaryBtn}
-                    onClick={() => addComment(p.id)}
+                    onClick={() => addComment(p.id, p.userId)}
                   >
                     Reply
                   </button>
