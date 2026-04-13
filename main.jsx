@@ -51,19 +51,14 @@ function App() {
       const userRef = doc(db, "users", res.user.uid);
       const snap = await getDoc(userRef);
 
-      if (snap.exists()) {
-        setSavedUsername(snap.data().username);
-      }
+      if (snap.exists()) setSavedUsername(snap.data().username);
 
       onSnapshot(userRef, (s) => {
         if (s.exists()) setUserData(s.data());
       });
 
       onSnapshot(query(collection(db, "posts")), (snapshot) => {
-        const data = snapshot.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        }));
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         data.sort((a, b) => b.createdAt - a.createdAt);
         setPosts(data);
         setLoading(false);
@@ -77,10 +72,7 @@ function App() {
       });
 
       onSnapshot(query(collection(db, "comments")), (snapshot) => {
-        const data = snapshot.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        }));
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         setComments(data);
       });
     }
@@ -200,15 +192,11 @@ function App() {
     setText("");
   }
 
-  // 🔥 FIXED FEED (DISCOVERY MODE)
   function filteredPosts() {
     if (!userData) return posts;
-
     const following = userData.following || [];
 
-    if (following.length === 0) {
-      return posts; // show all posts if not following anyone
-    }
+    if (following.length === 0) return posts;
 
     return posts.filter(
       p => following.includes(p.userId) || p.userId === user.uid
@@ -222,54 +210,68 @@ function App() {
   if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
 
   return (
-    <div style={styles.page}>
-      <h1 style={styles.title}>Kiaroni 🔥</h1>
+    <div style={styles.app}>
+      <div style={styles.container}>
+        <h1 style={styles.logo}>Kiaroni 🔥</h1>
 
-      {!savedUsername && (
-        <div style={styles.card}>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Choose username"
-          />
-          <button onClick={saveUsername}>Save</button>
-        </div>
-      )}
-
-      {/* HOME */}
-      {tab === "home" && (
-        <>
+        {!savedUsername && (
           <div style={styles.card}>
             <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="What's happening?"
+              style={styles.input}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Choose username"
             />
-            <button onClick={createPost}>Post</button>
+            <button style={styles.button} onClick={saveUsername}>
+              Save
+            </button>
           </div>
+        )}
 
-          {filteredPosts().map(p => {
-            const following = userData?.following || [];
-            const isFollowing = following.includes(p.userId);
+        {tab === "home" && (
+          <>
+            <div style={styles.card}>
+              <input
+                style={styles.input}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="What's happening?"
+              />
+              <button style={styles.button} onClick={createPost}>
+                Post
+              </button>
+            </div>
 
-            return (
-              <div key={p.id} style={styles.card}>
-                <strong>@{p.username}</strong>
+            {filteredPosts().map(p => {
+              const following = userData?.following || [];
+              const isFollowing = following.includes(p.userId);
 
-                {p.userId !== user.uid && (
-                  <button onClick={() => toggleFollow(p.userId)}>
-                    {isFollowing ? "Unfollow" : "Follow"}
-                  </button>
-                )}
+              return (
+                <div key={p.id} style={styles.card}>
+                  <div style={styles.row}>
+                    <strong>@{p.username}</strong>
 
-                <p>{p.text}</p>
+                    {p.userId !== user.uid && (
+                      <button
+                        style={styles.followBtn}
+                        onClick={() => toggleFollow(p.userId)}
+                      >
+                        {isFollowing ? "Following" : "Follow"}
+                      </button>
+                    )}
+                  </div>
 
-                <button onClick={() => toggleLike(p)}>
-                  ❤️ {(p.likes || []).length}
-                </button>
+                  <p style={styles.postText}>{p.text}</p>
 
-                <div>
+                  <div style={styles.actions}>
+                    <button onClick={() => toggleLike(p)}>
+                      ❤️ {(p.likes || []).length}
+                    </button>
+                  </div>
+
                   <input
+                    style={styles.input}
+                    placeholder="Reply..."
                     value={commentText[p.id] || ""}
                     onChange={(e) =>
                       setCommentText({
@@ -278,49 +280,52 @@ function App() {
                       })
                     }
                   />
-                  <button onClick={() => addComment(p.id, p.userId)}>
+
+                  <button
+                    style={styles.button}
+                    onClick={() => addComment(p.id, p.userId)}
+                  >
                     Reply
                   </button>
 
                   {comments
                     .filter(c => c.postId === p.id)
                     .map(c => (
-                      <p key={c.id}>
-                        @{c.username}: {c.text}
+                      <p key={c.id} style={styles.comment}>
+                        <strong>@{c.username}</strong>: {c.text}
                       </p>
                     ))}
                 </div>
-              </div>
-            );
-          })}
-        </>
-      )}
+              );
+            })}
+          </>
+        )}
 
-      {/* NOTIFICATIONS */}
-      {tab === "notifications" && (
-        <div style={styles.card}>
-          <h2>🔔 Notifications ({unreadCount})</h2>
-          {notifications.map((n, i) => (
-            <p key={i}>
-              {n.type === "like" && `❤️ ${n.fromUser} liked your post`}
-              {n.type === "comment" && `💬 ${n.fromUser}: ${n.text}`}
-            </p>
-          ))}
-        </div>
-      )}
+        {tab === "notifications" && (
+          <div style={styles.card}>
+            <h2>🔔 Notifications</h2>
+            {notifications.map((n, i) => (
+              <p key={i}>
+                {n.type === "like" && `❤️ ${n.fromUser} liked your post`}
+                {n.type === "comment" &&
+                  `💬 ${n.fromUser}: ${n.text}`}
+              </p>
+            ))}
+          </div>
+        )}
 
-      {/* PROFILE */}
-      {tab === "profile" && (
-        <div style={styles.card}>
-          <h2>@{savedUsername}</h2>
-          <p>Followers: {(userData?.followers || []).length}</p>
-          <p>Following: {(userData?.following || []).length}</p>
+        {tab === "profile" && (
+          <div style={styles.card}>
+            <h2>@{savedUsername}</h2>
+            <p>Followers: {(userData?.followers || []).length}</p>
+            <p>Following: {(userData?.following || []).length}</p>
 
-          {myPosts().map(p => (
-            <p key={p.id}>{p.text}</p>
-          ))}
-        </div>
-      )}
+            {myPosts().map(p => (
+              <p key={p.id}>{p.text}</p>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* NAV */}
       <div style={styles.nav}>
@@ -335,24 +340,70 @@ function App() {
 }
 
 const styles = {
-  page: {
-    padding: 20,
+  app: {
     background: "#0f172a",
-    color: "#fff",
-    minHeight: "100vh"
+    minHeight: "100vh",
+    display: "flex",
+    justifyContent: "center"
   },
-  title: { textAlign: "center" },
+  container: {
+    width: "100%",
+    maxWidth: 500,
+    padding: 20,
+    color: "#fff"
+  },
+  logo: {
+    textAlign: "center",
+    marginBottom: 20
+  },
   card: {
     background: "#1e293b",
     padding: 15,
-    marginTop: 10,
-    borderRadius: 10
+    borderRadius: 12,
+    marginBottom: 15
+  },
+  input: {
+    width: "100%",
+    padding: 10,
+    borderRadius: 8,
+    border: "none",
+    marginBottom: 10
+  },
+  button: {
+    width: "100%",
+    padding: 10,
+    borderRadius: 8,
+    border: "none",
+    background: "#3b82f6",
+    color: "#fff"
+  },
+  followBtn: {
+    padding: "5px 10px",
+    borderRadius: 20,
+    border: "none",
+    background: "#22c55e",
+    color: "#fff"
+  },
+  postText: {
+    margin: "10px 0"
+  },
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  actions: {
+    marginBottom: 10
+  },
+  comment: {
+    fontSize: 14,
+    marginTop: 5
   },
   nav: {
     position: "fixed",
     bottom: 0,
-    left: 0,
-    right: 0,
+    width: "100%",
+    maxWidth: 500,
     display: "flex",
     justifyContent: "space-around",
     background: "#1e293b",
