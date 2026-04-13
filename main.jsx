@@ -35,6 +35,7 @@ function App() {
 
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
+  const [image, setImage] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [notifications, setNotifications] = useState([]);
@@ -184,10 +185,11 @@ function App() {
   }
 
   async function createPost() {
-    if (!text) return;
+    if (!text && !image) return;
 
     await addDoc(collection(db, "posts"), {
       text,
+      image,
       userId: user.uid,
       username: savedUsername,
       likes: [],
@@ -195,9 +197,9 @@ function App() {
     });
 
     setText("");
+    setImage("");
   }
 
-  // 🧠 SMART FEED
   function filteredPosts() {
     if (!userData) return posts;
 
@@ -260,6 +262,14 @@ function App() {
                 onChange={(e) => setText(e.target.value)}
                 placeholder="What's happening?"
               />
+
+              <input
+                style={styles.input}
+                value={image}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="Paste image URL (optional)"
+              />
+
               <button style={styles.button} onClick={createPost}>
                 Post
               </button>
@@ -286,11 +296,17 @@ function App() {
 
                   <p style={styles.postText}>{p.text}</p>
 
-                  <div style={styles.actions}>
-                    <button onClick={() => toggleLike(p)}>
-                      ❤️ {(p.likes || []).length}
-                    </button>
-                  </div>
+                  {p.image && (
+                    <img
+                      src={p.image}
+                      style={styles.image}
+                      alt="post"
+                    />
+                  )}
+
+                  <button onClick={() => toggleLike(p)}>
+                    ❤️ {(p.likes || []).length}
+                  </button>
 
                   <input
                     style={styles.input}
@@ -314,7 +330,7 @@ function App() {
                   {comments
                     .filter(c => c.postId === p.id)
                     .map(c => (
-                      <p key={c.id} style={styles.comment}>
+                      <p key={c.id}>
                         <strong>@{c.username}</strong>: {c.text}
                       </p>
                     ))}
@@ -403,14 +419,17 @@ const styles = {
     background: "#22c55e",
     color: "#fff"
   },
+  image: {
+    width: "100%",
+    borderRadius: 10,
+    margin: "10px 0"
+  },
   row: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center"
   },
   postText: { margin: "10px 0" },
-  actions: { marginBottom: 10 },
-  comment: { fontSize: 14 },
   nav: {
     position: "fixed",
     bottom: 0,
