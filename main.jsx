@@ -15,6 +15,7 @@ import {
   updateDoc
 } from "firebase/firestore";
 
+// ✅ YOUR REAL CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
   authDomain: "kiaroni.firebaseapp.com",
@@ -56,6 +57,7 @@ function App() {
           ...d.data()
         }));
 
+        // 🔥 TRENDING SORT
         data.sort((a, b) => {
           const trustA = a.trustScore || 50;
           const trustB = b.trustScore || 50;
@@ -81,6 +83,7 @@ function App() {
     init();
   }, []);
 
+  // ⭐ TRUST SYSTEM
   async function updateTrust(userId, amount) {
     const ref = doc(db, "users", userId);
     const snap = await getDoc(ref);
@@ -95,6 +98,7 @@ function App() {
     });
   }
 
+  // ❤️ LIKE SYSTEM
   async function toggleLike(post) {
     const ref = doc(db, "posts", post.id);
     const currentLikes = post.likes || [];
@@ -113,6 +117,7 @@ function App() {
     });
   }
 
+  // 🚨 REPORT SYSTEM (FIXED WITH FEEDBACK)
   async function reportPost(post) {
     await updateTrust(post.userId, -5);
 
@@ -121,6 +126,8 @@ function App() {
       reportedUser: post.userId,
       createdAt: Date.now()
     });
+
+    alert("🚨 Report submitted");
   }
 
   async function saveUsername() {
@@ -156,6 +163,7 @@ function App() {
 
   if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
 
+  // 👤 PROFILE VIEW
   if (viewProfile) {
     return (
       <div style={styles.page}>
@@ -256,6 +264,7 @@ function App() {
   );
 }
 
+// 🎨 UI STYLES
 const styles = {
   page: {
     background: "#0f172a",
