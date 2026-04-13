@@ -58,8 +58,10 @@ function App() {
       });
 
       onSnapshot(query(collection(db, "posts")), (snapshot) => {
-        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        data.sort((a, b) => b.createdAt - a.createdAt);
+        const data = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        }));
         setPosts(data);
         setLoading(false);
       });
@@ -72,7 +74,10 @@ function App() {
       });
 
       onSnapshot(query(collection(db, "comments")), (snapshot) => {
-        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        const data = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        }));
         setComments(data);
       });
     }
@@ -192,15 +197,33 @@ function App() {
     setText("");
   }
 
+  // 🧠 SMART FEED
   function filteredPosts() {
     if (!userData) return posts;
+
     const following = userData.following || [];
 
-    if (following.length === 0) return posts;
+    let base =
+      following.length === 0
+        ? posts
+        : posts.filter(
+            p =>
+              following.includes(p.userId) ||
+              p.userId === user.uid
+          );
 
-    return posts.filter(
-      p => following.includes(p.userId) || p.userId === user.uid
-    );
+    return base
+      .map(p => {
+        const likes = (p.likes || []).length;
+        const recency =
+          Date.now() - p.createdAt < 1000 * 60 * 60 ? 10 : 0;
+
+        return {
+          ...p,
+          score: likes * 3 + recency
+        };
+      })
+      .sort((a, b) => b.score - a.score);
   }
 
   function myPosts() {
@@ -303,7 +326,7 @@ function App() {
 
         {tab === "notifications" && (
           <div style={styles.card}>
-            <h2>🔔 Notifications</h2>
+            <h2>🔔 Notifications ({unreadCount})</h2>
             {notifications.map((n, i) => (
               <p key={i}>
                 {n.type === "like" && `❤️ ${n.fromUser} liked your post`}
@@ -327,7 +350,6 @@ function App() {
         )}
       </div>
 
-      {/* NAV */}
       <div style={styles.nav}>
         <button onClick={() => setTab("home")}>🏠</button>
         <button onClick={() => setTab("notifications")}>
@@ -352,10 +374,7 @@ const styles = {
     padding: 20,
     color: "#fff"
   },
-  logo: {
-    textAlign: "center",
-    marginBottom: 20
-  },
+  logo: { textAlign: "center", marginBottom: 20 },
   card: {
     background: "#1e293b",
     padding: 15,
@@ -384,21 +403,14 @@ const styles = {
     background: "#22c55e",
     color: "#fff"
   },
-  postText: {
-    margin: "10px 0"
-  },
   row: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center"
   },
-  actions: {
-    marginBottom: 10
-  },
-  comment: {
-    fontSize: 14,
-    marginTop: 5
-  },
+  postText: { margin: "10px 0" },
+  actions: { marginBottom: 10 },
+  comment: { fontSize: 14 },
   nav: {
     position: "fixed",
     bottom: 0,
