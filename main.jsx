@@ -31,6 +31,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
   const [savedUsername, setSavedUsername] = useState(null);
+  const [userData, setUserData] = useState(null);
 
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
@@ -56,6 +57,11 @@ function App() {
         setSavedUsername(userSnap.data().username);
       }
 
+      // 👤 USER DATA LIVE
+      onSnapshot(userRef, (snap) => {
+        if (snap.exists()) setUserData(snap.data());
+      });
+
       // POSTS
       const q = query(collection(db, "posts"));
       onSnapshot(q, (snapshot) => {
@@ -64,28 +70,12 @@ function App() {
           ...d.data()
         }));
 
-        data.sort((a, b) => {
-          const trustA = a.trustScore || 50;
-          const trustB = b.trustScore || 50;
-
-          const likesA = (a.likes || []).length;
-          const likesB = (b.likes || []).length;
-
-          const trendA = trustA + likesA * 3;
-          const trendB = trustB + likesB * 3;
-
-          if (trendA === trendB) {
-            return b.createdAt - a.createdAt;
-          }
-
-          return trendB - trendA;
-        });
-
+        data.sort((a, b) => b.createdAt - a.createdAt);
         setPosts(data);
         setLoading(false);
       });
 
-      // NOTIFICATIONS
+      // 🔔 NOTIFICATIONS
       const notifQuery = query(collection(db, "notifications"));
       onSnapshot(notifQuery, (snapshot) => {
         const data = snapshot.docs.map(d => d.data());
@@ -95,7 +85,7 @@ function App() {
         setUnreadCount(mine.length);
       });
 
-      // COMMENTS
+      // 💬 COMMENTS
       const commentQuery = query(collection(db, "comments"));
       onSnapshot(commentQuery, (snapshot) => {
         const data = snapshot.docs.map(d => ({
@@ -109,17 +99,42 @@ function App() {
     init();
   }, []);
 
-  async function updateTrust(userId, amount) {
-    const ref = doc(db, "users", userId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
+  async function toggleFollow(targetUserId) {
+    const myRef = doc(db, "users", user.uid);
+    const theirRef = doc(db, "users", targetUserId);
 
-    const current = snap.data().trustScore || 50;
+    const mySnap = await getDoc(myRef);
+    const theirSnap = await getDoc(theirRef);
 
-    await setDoc(ref, {
-      ...snap.data(),
-      trustScore: current + amount
-    });
+    const myData = mySnap.data() || {};
+    const theirData = theirSnap.data() || {};
+
+    const following = myData.following || [];
+    const followers = theirData.followers || [];
+
+    const isFollowing = following.includes(targetUserId);
+
+    if (isFollowing) {
+      await setDoc(myRef, {
+        ...myData,
+        following: following.filter(id => id !== targetUserId)
+      });
+
+      await setDoc(theirRef, {
+        ...theirData,
+        followers: followers.filter(id => id !== user.uid)
+      });
+    } else {
+      await setDoc(myRef, {
+        ...myData,
+        following: [...following, targetUserId]
+      });
+
+      await setDoc(theirRef, {
+        ...theirData,
+        followers: [...followers, user.uid]
+      });
+    }
   }
 
   async function toggleLike(post) {
@@ -132,8 +147,6 @@ function App() {
       updatedLikes = currentLikes.filter(id => id !== user.uid);
     } else {
       updatedLikes = [...currentLikes, user.uid];
-
-      await updateTrust(post.userId, 1);
 
       if (post.userId !== user.uid) {
         await addDoc(collection(db, "notifications"), {
@@ -183,12 +196,20 @@ function App() {
       userId: user.uid,
       username: savedUsername,
       likes: [],
-      trustScore: 50,
       createdAt: Date.now()
     });
 
-    await updateTrust(user.uid, 1);
     setText("");
+  }
+
+  function filteredPosts() {
+    if (!userData) return posts;
+
+    const following = userData.following || [];
+
+    return posts.filter(
+      p => following.includes(p.userId) || p.userId === user.uid
+    );
   }
 
   function myPosts() {
@@ -216,39 +237,51 @@ function App() {
             </button>
           </div>
 
-          {posts.map(p => (
-            <div key={p.id} style={styles.card}>
-              <strong>@{p.username}</strong>
-              <p>{p.text}</p>
+          {filteredPosts().map(p => {
+            const following = userData?.following || [];
+            const isFollowing = following.includes(p.userId);
 
-              <button onClick={() => toggleLike(p)}>
-                ❤️ {(p.likes || []).length}
-              </button>
+            return (
+              <div key={p.id} style={styles.card}>
+                <strong>@{p.username}</strong>
 
-              <div>
-                <input
-                  value={commentText[p.id] || ""}
-                  onChange={(e) =>
-                    setCommentText({
-                      ...commentText,
-                      [p.id]: e.target.value
-                    })
-                  }
-                />
-                <button onClick={() => addComment(p.id, p.userId)}>
-                  Reply
+                {p.userId !== user.uid && (
+                  <button onClick={() => toggleFollow(p.userId)}>
+                    {isFollowing ? "Unfollow" : "Follow"}
+                  </button>
+                )}
+
+                <p>{p.text}</p>
+
+                <button onClick={() => toggleLike(p)}>
+                  ❤️ {(p.likes || []).length}
                 </button>
 
-                {comments
-                  .filter(c => c.postId === p.id)
-                  .map(c => (
-                    <p key={c.id}>
-                      @{c.username}: {c.text}
-                    </p>
-                  ))}
+                <div>
+                  <input
+                    value={commentText[p.id] || ""}
+                    onChange={(e) =>
+                      setCommentText({
+                        ...commentText,
+                        [p.id]: e.target.value
+                      })
+                    }
+                  />
+                  <button onClick={() => addComment(p.id, p.userId)}>
+                    Reply
+                  </button>
+
+                  {comments
+                    .filter(c => c.postId === p.id)
+                    .map(c => (
+                      <p key={c.id}>
+                        @{c.username}: {c.text}
+                      </p>
+                    ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
 
@@ -269,13 +302,16 @@ function App() {
       {tab === "profile" && (
         <div style={styles.card}>
           <h2>@{savedUsername}</h2>
+          <p>Followers: {(userData?.followers || []).length}</p>
+          <p>Following: {(userData?.following || []).length}</p>
+
           {myPosts().map(p => (
             <p key={p.id}>{p.text}</p>
           ))}
         </div>
       )}
 
-      {/* BOTTOM NAV */}
+      {/* NAV */}
       <div style={styles.nav}>
         <button onClick={() => setTab("home")}>🏠</button>
         <button onClick={() => setTab("notifications")}>
@@ -288,11 +324,26 @@ function App() {
 }
 
 const styles = {
-  page: { padding: 20, color: "#fff", background: "#0f172a", minHeight: "100vh" },
+  page: {
+    padding: 20,
+    color: "#fff",
+    background: "#0f172a",
+    minHeight: "100vh"
+  },
   title: { textAlign: "center" },
-  card: { background: "#1e293b", padding: 15, marginTop: 10, borderRadius: 10 },
-  input: { width: "100%", marginBottom: 10 },
-  primaryBtn: { width: "100%" },
+  card: {
+    background: "#1e293b",
+    padding: 15,
+    marginTop: 10,
+    borderRadius: 10
+  },
+  input: {
+    width: "100%",
+    marginBottom: 10
+  },
+  primaryBtn: {
+    width: "100%"
+  },
   nav: {
     position: "fixed",
     bottom: 0,
