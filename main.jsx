@@ -35,6 +35,7 @@ const storage = getStorage(app);
 
 function App() {
   const [tab, setTab] = useState("home");
+  const [feedMode, setFeedMode] = useState("foryou");
 
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
@@ -55,7 +56,6 @@ function App() {
   const [notifications, setNotifications] = useState([]);
 
   const [selectedProfile, setSelectedProfile] = useState(null);
-  const [viewList, setViewList] = useState(null);
 
   useEffect(() => {
     async function init() {
@@ -92,7 +92,7 @@ function App() {
     init();
   }, []);
 
-  // 🔥 TRENDING FEED
+  // 🔥 FOR YOU FEED
   function getTrendingPosts() {
     return [...posts]
       .map(p => {
@@ -105,6 +105,15 @@ function App() {
         return { ...p, score };
       })
       .sort((a, b) => b.score - a.score);
+  }
+
+  // 👥 FOLLOWING FEED
+  function getFollowingPosts() {
+    if (!userData?.following) return [];
+
+    return posts
+      .filter(p => userData.following.includes(p.userId))
+      .sort((a, b) => b.createdAt - a.createdAt);
   }
 
   async function saveUsername() {
@@ -138,6 +147,7 @@ function App() {
       await updateDoc(myRef, {
         following: following.filter(id => id !== targetId)
       });
+
       await updateDoc(theirRef, {
         followers: followers.filter(id => id !== user.uid)
       });
@@ -145,6 +155,7 @@ function App() {
       await updateDoc(myRef, {
         following: [...following, targetId]
       });
+
       await updateDoc(theirRef, {
         followers: [...followers, user.uid]
       });
@@ -221,10 +232,6 @@ function App() {
     return posts.filter(p => p.userId === userId);
   }
 
-  function findUsers(ids = []) {
-    return users.filter(u => ids.includes(u.id));
-  }
-
   return (
     <div style={styles.app}>
       <div style={styles.container}>
@@ -240,11 +247,39 @@ function App() {
         {/* HOME */}
         {tab === "home" && !selectedProfile && (
           <>
+            {/* FEED TOGGLE */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <button
+                onClick={() => setFeedMode("foryou")}
+                style={{
+                  background: feedMode === "foryou" ? "#3b82f6" : "#1e293b",
+                  color: "#fff"
+                }}
+              >
+                🔥 For You
+              </button>
+
+              <button
+                onClick={() => setFeedMode("following")}
+                style={{
+                  background: feedMode === "following" ? "#3b82f6" : "#1e293b",
+                  color: "#fff"
+                }}
+              >
+                👥 Following
+              </button>
+            </div>
+
+            {/* POST */}
             <input value={text} onChange={e => setText(e.target.value)} placeholder="Post..." />
             <input type="file" onChange={e => setFile(e.target.files[0])} />
             <button onClick={createPost}>Post</button>
 
-            {getTrendingPosts().map(p => (
+            {/* FEED */}
+            {(feedMode === "foryou"
+              ? getTrendingPosts()
+              : getFollowingPosts()
+            ).map(p => (
               <div key={p.id} style={styles.card}>
                 <strong onClick={() => setSelectedProfile({ id: p.userId, username: p.username })}>
                   @{p.username}
@@ -253,7 +288,6 @@ function App() {
                 <p>{p.text}</p>
                 {p.image && <img src={p.image} style={styles.image} />}
 
-                {/* ACTION BAR */}
                 <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
                   <button onClick={() => toggleLike(p)}>
                     {(p.likes || []).includes(user.uid) ? "💖" : "🤍"} {(p.likes || []).length}
@@ -291,20 +325,11 @@ function App() {
             <button onClick={() => setSelectedProfile(null)}>← Back</button>
             <h2>@{selectedProfile.username}</h2>
 
-            <p>
-              Followers:{" "}
-              <span onClick={() => setViewList("followers")}>
-                {findUsers(users.find(u => u.id === selectedProfile.id)?.followers || []).length}
-              </span>{" "}
-              | Following:{" "}
-              <span onClick={() => setViewList("following")}>
-                {findUsers(users.find(u => u.id === selectedProfile.id)?.following || []).length}
-              </span>
-            </p>
-
             {selectedProfile.id !== user.uid && (
               <button onClick={() => toggleFollow(selectedProfile.id)}>
-                {userData?.following?.includes(selectedProfile.id) ? "Unfollow" : "Follow"}
+                {userData?.following?.includes(selectedProfile.id)
+                  ? "Unfollow"
+                  : "Follow"}
               </button>
             )}
 
