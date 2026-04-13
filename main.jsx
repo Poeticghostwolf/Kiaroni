@@ -10,7 +10,8 @@ import {
   onSnapshot,
   doc,
   setDoc,
-  getDoc
+  getDoc,
+  updateDoc
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -95,11 +96,34 @@ function App() {
       image,
       userId: user.uid,
       username: savedUsername,
+      likes: [],
       createdAt: Date.now()
     });
 
     setText("");
     setImage("");
+  }
+
+  async function toggleLike(post) {
+    const ref = doc(db, "posts", post.id);
+    const likes = post.likes || [];
+
+    const isLiked = likes.includes(user.uid);
+
+    const updated = isLiked
+      ? likes.filter(id => id !== user.uid)
+      : [...likes, user.uid];
+
+    await updateDoc(ref, { likes: updated });
+
+    // 🔔 NOTIFY (only when liking, not unliking)
+    if (!isLiked && post.userId !== user.uid) {
+      await addDoc(collection(db, "notifications"), {
+        text: `${savedUsername} liked your post`,
+        toUser: post.userId,
+        createdAt: Date.now()
+      });
+    }
   }
 
   async function sendMessage() {
@@ -113,7 +137,6 @@ function App() {
       createdAt: Date.now()
     });
 
-    // 🔔 NOTIFICATION
     await addDoc(collection(db, "notifications"), {
       text: `${savedUsername} sent you a message`,
       toUser: chatUser.id,
@@ -191,21 +214,29 @@ function App() {
             />
             <button onClick={createPost}>Post</button>
 
-            {posts.map(p => (
-              <div key={p.id} style={styles.card}>
-                <strong
-                  onClick={() => {
-                    setChatUser({ id: p.userId, username: p.username });
-                    setTab("chat");
-                  }}
-                >
-                  @{p.username}
-                </strong>
+            {posts.map(p => {
+              const isLiked = (p.likes || []).includes(user.uid);
 
-                <p>{p.text}</p>
-                {p.image && <img src={p.image} style={styles.image} />}
-              </div>
-            ))}
+              return (
+                <div key={p.id} style={styles.card}>
+                  <strong
+                    onClick={() => {
+                      setChatUser({ id: p.userId, username: p.username });
+                      setTab("chat");
+                    }}
+                  >
+                    @{p.username}
+                  </strong>
+
+                  <p>{p.text}</p>
+                  {p.image && <img src={p.image} style={styles.image} />}
+
+                  <button onClick={() => toggleLike(p)}>
+                    {isLiked ? "💖" : "🤍"} {(p.likes || []).length}
+                  </button>
+                </div>
+              );
+            })}
           </>
         )}
 
@@ -257,10 +288,7 @@ function App() {
 
             {getConversations().length === 0 ? (
               <div style={styles.card}>
-                <p>No messages yet</p>
-                <p style={{ opacity: 0.7 }}>
-                  Search for users to start chatting 🔍
-                </p>
+                No messages yet — search users 🔍
               </div>
             ) : (
               getConversations().map(c => (
@@ -316,8 +344,7 @@ const styles = {
     background: "#1e293b",
     padding: 10,
     marginTop: 10,
-    borderRadius: 10,
-    cursor: "pointer"
+    borderRadius: 10
   },
   image: { width: "100%", borderRadius: 10 },
   nav: {
