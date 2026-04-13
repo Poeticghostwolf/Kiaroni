@@ -16,7 +16,7 @@ import {
 } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDLwujgVQGVc9I909EkAkaal3BLobQTSBw",
+  apiKey: "YOUR_API_KEY",
   authDomain: "kiaroni.firebaseapp.com",
   projectId: "kiaroni"
 };
@@ -56,7 +56,6 @@ function App() {
           ...d.data()
         }));
 
-        // 🔥 TRENDING SORT
         data.sort((a, b) => {
           const trustA = a.trustScore || 50;
           const trustB = b.trustScore || 50;
@@ -157,7 +156,6 @@ function App() {
 
   if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
 
-  // PROFILE PAGE
   if (viewProfile) {
     return (
       <div style={styles.page}>
@@ -188,12 +186,12 @@ function App() {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Choose username"
           />
-          <button style={styles.button} onClick={saveUsername}>
+          <button style={styles.primaryBtn} onClick={saveUsername}>
             Save
           </button>
         </div>
       ) : (
-        <p style={{ marginBottom: 20 }}>@{savedUsername}</p>
+        <p style={styles.usernameDisplay}>@{savedUsername}</p>
       )}
 
       <div style={styles.card}>
@@ -203,7 +201,7 @@ function App() {
           onChange={(e) => setText(e.target.value)}
           placeholder="What's happening?"
         />
-        <button style={styles.button} onClick={createPost}>
+        <button style={styles.primaryBtn} onClick={createPost}>
           Post
         </button>
       </div>
@@ -235,12 +233,18 @@ function App() {
                 <p style={styles.text}>{p.text}</p>
 
                 <div style={styles.actions}>
-                  <button style={styles.likeBtn} onClick={() => toggleLike(p)}>
+                  <button
+                    style={styles.likeBtn}
+                    onClick={() => toggleLike(p)}
+                  >
                     {liked ? "💔" : "❤️"} {(p.likes || []).length}
                   </button>
 
-                  <button style={styles.reportBtn} onClick={() => reportPost(p)}>
-                    🚨 Report
+                  <button
+                    style={styles.reportBtn}
+                    onClick={() => reportPost(p)}
+                  >
+                    🚨
                   </button>
                 </div>
               </>
@@ -252,7 +256,6 @@ function App() {
   );
 }
 
-// 🎨 CLEAN UI STYLES
 const styles = {
   page: {
     background: "#0f172a",
@@ -260,11 +263,17 @@ const styles = {
     color: "#fff",
     padding: 20,
     maxWidth: 600,
-    margin: "0 auto"
+    margin: "0 auto",
+    fontFamily: "system-ui"
   },
   title: {
     textAlign: "center",
     marginBottom: 20
+  },
+  usernameDisplay: {
+    textAlign: "center",
+    marginBottom: 20,
+    opacity: 0.8
   },
   card: {
     background: "#1e293b",
@@ -279,25 +288,28 @@ const styles = {
     border: "none",
     marginBottom: 10
   },
-  button: {
-    padding: "8px 12px",
+  primaryBtn: {
+    width: "100%",
+    padding: 10,
     borderRadius: 8,
     border: "none",
+    background: "#3b82f6",
+    color: "#fff",
     cursor: "pointer"
   },
   header: {
     marginBottom: 8
   },
   username: {
-    cursor: "pointer",
-    fontWeight: "bold"
+    fontWeight: "bold",
+    cursor: "pointer"
   },
   text: {
     marginBottom: 10
   },
   actions: {
     display: "flex",
-    gap: 10
+    justifyContent: "space-between"
   },
   likeBtn: {
     background: "#334155",
