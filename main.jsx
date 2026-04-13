@@ -37,8 +37,11 @@ function App() {
   const [viewProfile, setViewProfile] = useState(null);
   const [animatingLike, setAnimatingLike] = useState(null);
 
-  // 🔔 NEW
   const [notifications, setNotifications] = useState([]);
+
+  // 💬 COMMENTS
+  const [commentText, setCommentText] = useState({});
+  const [comments, setComments] = useState([]);
 
   useEffect(() => {
     async function init() {
@@ -81,12 +84,22 @@ function App() {
         setLoading(false);
       });
 
-      // 🔔 NOTIFICATIONS LISTENER
+      // 🔔 NOTIFICATIONS
       const notifQuery = query(collection(db, "notifications"));
       onSnapshot(notifQuery, (snapshot) => {
         const data = snapshot.docs.map(d => d.data());
         const mine = data.filter(n => n.toUser === res.user.uid);
         setNotifications(mine);
+      });
+
+      // 💬 COMMENTS
+      const commentQuery = query(collection(db, "comments"));
+      onSnapshot(commentQuery, (snapshot) => {
+        const data = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        }));
+        setComments(data);
       });
     }
 
@@ -119,7 +132,6 @@ function App() {
 
       await updateTrust(post.userId, 1);
 
-      // 🔔 CREATE NOTIFICATION
       if (post.userId !== user.uid) {
         await addDoc(collection(db, "notifications"), {
           type: "like",
@@ -176,6 +188,21 @@ function App() {
     setText("");
   }
 
+  // 💬 ADD COMMENT
+  async function addComment(postId) {
+    const text = commentText[postId];
+    if (!text) return;
+
+    await addDoc(collection(db, "comments"), {
+      postId,
+      text,
+      username: savedUsername,
+      createdAt: Date.now()
+    });
+
+    setCommentText(prev => ({ ...prev, [postId]: "" }));
+  }
+
   function profilePosts() {
     return posts.filter(p => p.userId === viewProfile.userId);
   }
@@ -204,7 +231,7 @@ function App() {
     <div style={styles.page}>
       <h1 style={styles.title}>Kiaroni 🔥</h1>
 
-      {/* 🔔 NOTIFICATIONS UI */}
+      {/* 🔔 NOTIFICATIONS */}
       {notifications.length > 0 && (
         <div style={styles.card}>
           <h3>🔔 Notifications</h3>
@@ -298,6 +325,36 @@ function App() {
                   >
                     🚨
                   </button>
+                </div>
+
+                {/* 💬 COMMENTS UI */}
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    style={styles.input}
+                    placeholder="Reply..."
+                    value={commentText[p.id] || ""}
+                    onChange={(e) =>
+                      setCommentText({
+                        ...commentText,
+                        [p.id]: e.target.value
+                      })
+                    }
+                  />
+                  <button
+                    style={styles.primaryBtn}
+                    onClick={() => addComment(p.id)}
+                  >
+                    Reply
+                  </button>
+
+                  {comments
+                    .filter(c => c.postId === p.id)
+                    .slice(0, 3)
+                    .map(c => (
+                      <p key={c.id} style={{ fontSize: 14 }}>
+                        <strong>@{c.username}</strong>: {c.text}
+                      </p>
+                    ))}
                 </div>
               </>
             )}
