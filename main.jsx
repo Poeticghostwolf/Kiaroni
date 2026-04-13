@@ -57,7 +57,6 @@ function App() {
 
   const [users, setUsers] = useState([]);
   const [userData, setUserData] = useState(null);
-  const [selectedProfile, setSelectedProfile] = useState(null);
 
   const [reports, setReports] = useState([]);
   const [swipeQueue, setSwipeQueue] = useState([]);
@@ -231,78 +230,162 @@ function App() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Kiaroni 🔥</h1>
+    <div style={styles.app}>
+      <div style={styles.overlay}>
+        <div style={styles.container}>
+          <h1>Kiaroni 🔥</h1>
 
-      {popup && <div>{popup}</div>}
+          {popup && <div style={styles.popup}>{popup}</div>}
 
-      {!savedUsername && (
-        <>
-          <input
-            placeholder="Username"
-            value={usernameInput}
-            onChange={e => setUsernameInput(e.target.value)}
-          />
-          <button onClick={createUserIfNeeded}>Continue</button>
-        </>
-      )}
+          {!savedUsername && (
+            <>
+              <input
+                style={styles.input}
+                placeholder="Username"
+                value={usernameInput}
+                onChange={e => setUsernameInput(e.target.value)}
+              />
+              <button style={styles.button} onClick={createUserIfNeeded}>
+                Continue
+              </button>
+            </>
+          )}
 
-      {tab === "home" &&
-        getSmartFeed().map(p => (
-          <div key={p.id}>
-            <b onClick={() => setSelectedProfile({ id: p.userId, username: p.username })}>
-              @{p.username}
-            </b>
-            <p>{p.text}</p>
-            <button onClick={() => toggleLike(p)}>❤️</button>
-            <button onClick={() => setChatUser({ id: p.userId })}>💬</button>
-          </div>
-        ))}
+          {tab === "home" &&
+            getSmartFeed().map(p => (
+              <div key={p.id} style={styles.card}>
+                <b>@{p.username}</b>
+                <p>{p.text}</p>
+                <button style={styles.button} onClick={() => toggleLike(p)}>
+                  ❤️ {(p.likes || []).length}
+                </button>
+                <button style={styles.button} onClick={() => setChatUser({ id: p.userId })}>
+                  💬
+                </button>
+              </div>
+            ))}
 
-      {tab === "swipe" && swipeQueue.length > 0 && (
-        <div>
-          <h2>@{swipeQueue[0].username}</h2>
-          <button onClick={() => swipe(swipeQueue[0].id, false)}>❌</button>
-          <button onClick={() => swipe(swipeQueue[0].id, true)}>💖</button>
-        </div>
-      )}
-
-      {tab === "admin" && userData?.isAdmin && (
-        <div>
-          <h2>Admin Panel</h2>
-          {reports.map((r, i) => (
-            <div key={i}>
-              <p>{r.postId}</p>
-              <p>{r.reportedUser}</p>
+          {tab === "swipe" && swipeQueue.length > 0 && (
+            <div style={styles.card}>
+              <h2>@{swipeQueue[0].username}</h2>
+              <button style={styles.button} onClick={() => swipe(swipeQueue[0].id, false)}>❌</button>
+              <button style={styles.button} onClick={() => swipe(swipeQueue[0].id, true)}>💖</button>
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {chatUser && (
-        <div>
-          {messages.map(m => (
-            <div key={m.id}>{m.text}</div>
-          ))}
-          <input value={chatText} onChange={e => setChatText(e.target.value)} />
-          <button onClick={sendMessage}>Send</button>
-        </div>
-      )}
+          {tab === "admin" && userData?.isAdmin && (
+            <div style={styles.card}>
+              <h2>Admin Panel</h2>
+              {reports.map((r, i) => (
+                <div key={i}>
+                  <p>{r.postId}</p>
+                  <p>{r.reportedUser}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
-      <div style={{ position: "fixed", bottom: 0 }}>
+          {chatUser && (
+            <div style={styles.card}>
+              {messages.map(m => (
+                <div key={m.id}>{m.text}</div>
+              ))}
+              <input
+                style={styles.input}
+                value={chatText}
+                onChange={e => setChatText(e.target.value)}
+              />
+              <button style={styles.button} onClick={sendMessage}>
+                Send
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={styles.nav}>
         {[
-          "home",
-          "swipe",
-          "profile",
-          ...(userData?.isAdmin ? ["admin"] : [])
+          { id: "home", icon: "🏠" },
+          { id: "swipe", icon: "🔥" },
+          { id: "profile", icon: "👤" },
+          ...(userData?.isAdmin ? [{ id: "admin", icon: "🛡" }] : [])
         ].map(t => (
-          <button key={t} onClick={() => setTab(t)}>
-            {t}
+          <button
+            key={t.id}
+            style={styles.navBtn}
+            onClick={() => setTab(t.id)}
+          >
+            {t.icon}
           </button>
         ))}
       </div>
     </div>
   );
 }
+
+const styles = {
+  app: {
+    minHeight: "100vh",
+    color: "#fff",
+    backgroundImage: "url('/background.jpg')",
+    backgroundSize: "cover",
+    backgroundPosition: "center"
+  },
+  overlay: {
+    minHeight: "100vh",
+    background: "rgba(15,23,42,0.75)",
+    backdropFilter: "blur(10px)"
+  },
+  container: {
+    maxWidth: 500,
+    margin: "auto",
+    padding: 20
+  },
+  card: {
+    background: "rgba(30,41,59,0.6)",
+    backdropFilter: "blur(12px)",
+    borderRadius: 16,
+    padding: 15,
+    marginTop: 10
+  },
+  input: {
+    width: "100%",
+    padding: 10,
+    borderRadius: 10,
+    border: "none",
+    marginTop: 10
+  },
+  button: {
+    marginTop: 10,
+    padding: "10px 15px",
+    borderRadius: 10,
+    border: "none",
+    background: "#6366f1",
+    color: "#fff"
+  },
+  nav: {
+    position: "fixed",
+    bottom: 0,
+    width: "100%",
+    display: "flex",
+    justifyContent: "space-around",
+    background: "rgba(30,41,59,0.7)"
+  },
+  navBtn: {
+    background: "none",
+    border: "none",
+    fontSize: 22,
+    color: "#fff"
+  },
+  popup: {
+    position: "fixed",
+    bottom: 80,
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#6366f1",
+    padding: "10px 20px",
+    borderRadius: 20
+  }
+};
 
 createRoot(document.getElementById("root")).render(<App />);
