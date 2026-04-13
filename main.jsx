@@ -11,8 +11,7 @@ import {
   query,
   doc,
   setDoc,
-  getDoc,
-  updateDoc
+  getDoc
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -31,7 +30,6 @@ function App() {
   const [user, setUser] = useState(null);
   const [username, setUsername] = useState("");
   const [savedUsername, setSavedUsername] = useState(null);
-  const [userData, setUserData] = useState(null);
 
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
@@ -40,6 +38,9 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [chatUser, setChatUser] = useState(null);
   const [chatText, setChatText] = useState("");
+
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState("");
 
   const [loading, setLoading] = useState(true);
 
@@ -53,16 +54,16 @@ function App() {
       const snap = await getDoc(userRef);
       if (snap.exists()) setSavedUsername(snap.data().username);
 
-      onSnapshot(userRef, (s) => {
-        if (s.exists()) setUserData(s.data());
+      onSnapshot(collection(db, "users"), snap => {
+        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
-      onSnapshot(query(collection(db, "posts")), (snap) => {
+      onSnapshot(collection(db, "posts"), snap => {
         setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         setLoading(false);
       });
 
-      onSnapshot(query(collection(db, "messages")), (snap) => {
+      onSnapshot(collection(db, "messages"), snap => {
         setMessages(snap.docs.map(d => d.data()));
       });
     }
@@ -74,9 +75,7 @@ function App() {
     if (!username) return;
 
     await setDoc(doc(db, "users", user.uid), {
-      username,
-      following: [],
-      followers: []
+      username
     });
 
     setSavedUsername(username);
@@ -90,7 +89,6 @@ function App() {
       image,
       userId: user.uid,
       username: savedUsername,
-      likes: [],
       createdAt: Date.now()
     });
 
@@ -104,7 +102,7 @@ function App() {
     await addDoc(collection(db, "messages"), {
       text: chatText,
       from: user.uid,
-      to: chatUser.userId,
+      to: chatUser.id,
       username: savedUsername,
       createdAt: Date.now()
     });
@@ -134,41 +132,20 @@ function App() {
   function getChatMessages() {
     if (!chatUser) return [];
 
-    return messages
-      .filter(
-        m =>
-          (m.from === user.uid && m.to === chatUser.userId) ||
-          (m.to === user.uid && m.from === chatUser.userId)
-      )
-      .sort((a, b) => a.createdAt - b.createdAt);
+    return messages.filter(
+      m =>
+        (m.from === user.uid && m.to === chatUser.id) ||
+        (m.to === user.uid && m.from === chatUser.id)
+    );
   }
 
-  function filteredPosts() {
-    if (!userData) return posts;
-
-    const following = userData.following || [];
-
-    let base =
-      following.length === 0
-        ? posts
-        : posts.filter(
-            p =>
-              following.includes(p.userId) ||
-              p.userId === user.uid
-          );
-
-    return base
-      .map(p => {
-        const likes = (p.likes || []).length;
-        const recency =
-          Date.now() - p.createdAt < 3600000 ? 10 : 0;
-
-        return { ...p, score: likes * 3 + recency };
-      })
-      .sort((a, b) => b.score - a.score);
+  function searchResults() {
+    return users.filter(u =>
+      u.username?.toLowerCase().includes(search.toLowerCase())
+    );
   }
 
-  if (loading) return <p style={{ padding: 20 }}>Loading...</p>;
+  if (loading) return <p>Loading...</p>;
 
   return (
     <div style={styles.app}>
@@ -201,15 +178,11 @@ function App() {
             />
             <button onClick={createPost}>Post</button>
 
-            {filteredPosts().map(p => (
+            {posts.map(p => (
               <div key={p.id} style={styles.card}>
                 <strong
-                  style={{ cursor: "pointer" }}
                   onClick={() => {
-                    setChatUser({
-                      userId: p.userId,
-                      username: p.username
-                    });
+                    setChatUser({ id: p.userId, username: p.username });
                     setTab("chat");
                   }}
                 >
@@ -218,10 +191,30 @@ function App() {
 
                 <p>{p.text}</p>
                 {p.image && <img src={p.image} style={styles.image} />}
+              </div>
+            ))}
+          </>
+        )}
 
-                <button>
-                  ❤️ {(p.likes || []).length}
-                </button>
+        {/* SEARCH */}
+        {tab === "search" && (
+          <>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search users..."
+            />
+
+            {searchResults().map(u => (
+              <div
+                key={u.id}
+                style={styles.card}
+                onClick={() => {
+                  setChatUser(u);
+                  setTab("chat");
+                }}
+              >
+                🔍 @{u.username}
               </div>
             ))}
           </>
@@ -236,7 +229,7 @@ function App() {
               <div style={styles.card}>
                 <p>No messages yet</p>
                 <p style={{ opacity: 0.7 }}>
-                  Go to Home and tap a username to start chatting 👆
+                  Search for users to start chatting 🔍
                 </p>
               </div>
             ) : (
@@ -244,7 +237,7 @@ function App() {
                 <div
                   key={c.userId}
                   style={styles.card}
-                  onClick={() => setChatUser(c)}
+                  onClick={() => setChatUser({ id: c.userId, username: c.username })}
                 >
                   💬 @{c.username}
                 </div>
@@ -253,7 +246,7 @@ function App() {
           </>
         )}
 
-        {/* CHAT VIEW */}
+        {/* CHAT */}
         {tab === "chat" && chatUser && (
           <>
             <button onClick={() => setChatUser(null)}>← Back</button>
@@ -278,6 +271,7 @@ function App() {
 
       <div style={styles.nav}>
         <button onClick={() => setTab("home")}>🏠</button>
+        <button onClick={() => setTab("search")}>🔍</button>
         <button onClick={() => setTab("chat")}>💬</button>
       </div>
     </div>
@@ -285,16 +279,8 @@ function App() {
 }
 
 const styles = {
-  app: {
-    background: "#0f172a",
-    minHeight: "100vh",
-    color: "#fff"
-  },
-  container: {
-    maxWidth: 500,
-    margin: "auto",
-    padding: 20
-  },
+  app: { background: "#0f172a", minHeight: "100vh", color: "#fff" },
+  container: { maxWidth: 500, margin: "auto", padding: 20 },
   card: {
     background: "#1e293b",
     padding: 10,
@@ -302,10 +288,7 @@ const styles = {
     borderRadius: 10,
     cursor: "pointer"
   },
-  image: {
-    width: "100%",
-    borderRadius: 10
-  },
+  image: { width: "100%", borderRadius: 10 },
   nav: {
     position: "fixed",
     bottom: 0,
