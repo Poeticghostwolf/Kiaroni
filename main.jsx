@@ -63,19 +63,19 @@ function App() {
 
   useEffect(() => {
     const unsubscribers = [];
-    let isMounted = true;
+    let mounted = true;
 
     async function init() {
       try {
         const res = await signInAnonymously(auth);
-        if (!isMounted) return;
+        if (!mounted) return;
 
         setUser(res.user);
 
         const userRef = doc(db, "users", res.user.uid);
         const userSnap = await getDoc(userRef);
 
-        if (userSnap.exists() && isMounted) {
+        if (userSnap.exists() && mounted) {
           const data = userSnap.data();
           setSavedUsername(data.username || "");
           setUserData(data);
@@ -144,13 +144,11 @@ function App() {
     init();
 
     return () => {
-      isMounted = false;
+      mounted = false;
       unsubscribers.forEach(unsub => {
         try {
           unsub();
-        } catch {
-          // ignore cleanup errors
-        }
+        } catch {}
       });
       window.clearTimeout(window.__kiaroniPopupTimer);
     };
